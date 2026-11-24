@@ -54,4 +54,4 @@ jobs:
           fi
           test -z "$(git ls-remote --tags origin "refs/tags/$tag")"
           gh release create "$tag" dist/*.exe dist/*.zip dist/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "PT Analytics Next $tag" --notes-file RELEASE_NOTES.md --draft
-          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false
+          bash scripts/publish-draft.sh "$GITHUB_REPOSITORY" "$tag" "$GITHUB_SHA" dist

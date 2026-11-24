@@ -112,6 +112,5 @@ if ((publish)); then
         "$ROOT/dist/$portable" "$ROOT/dist/$installer" "$ROOT/dist/$source" "$ROOT/dist/SHA256SUMS.txt" \
         --repo "$REPO" --target "$head" --title "PT Analytics Next $tag" \
         --notes-file "$stage/RELEASE_NOTES.md" --draft
-    gh release edit "$tag" --repo "$REPO" --draft=false
-    gh release view "$tag" --repo "$REPO" --json url --jq '.url'
+    bash "$stage/scripts/publish-draft.sh" "$REPO" "$tag" "$head" "$ROOT/dist"
 fi

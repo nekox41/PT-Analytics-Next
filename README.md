@@ -34,6 +34,8 @@ Aameow&ChatGPT 开发的高性能、稳定且可靠的大蜘蛛竞速工具，�
 3. 如未找到日志，在设置中指定 EE.log 的绝对路径。
 4. 数据保存在应用本地数据目录下的 runs.sqlite3 中。删除记录会保留去重标记，避免重启时重新导入。
 
+若旧版 GitHub CLI 不支持 `gh release edit`，无需重新构建：确认草稿的附件均已上传后，可在 GitHub Releases 网页发布草稿。新脚本使用 REST API 发布草稿，兼容 Ubuntu 22.04 自带的旧版 gh，并在发布前检查附件及对应的源码提交。
+
 ## 开发
 
 Windows 需要 Node.js 22、Python 3.11+、Rust stable、Visual Studio C++ Build Tools、WebView2 Runtime。
