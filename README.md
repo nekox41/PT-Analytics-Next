@@ -1,10 +1,21 @@
+<div align="center">
+
+<img src="assets/logo.png" alt="PT Analytics Next" width="144" height="144">
+
 # PT Analytics Next
 
 **利润收割者竞速分析 · Rust × Tauri 2**
 
+[![Latest Release](https://img.shields.io/github/v/release/nekox41/PT-Analytics-Next?style=flat-square&label=version&color=6eaf46)](https://github.com/nekox41/PT-Analytics-Next/releases/latest)
+[![Stars](https://img.shields.io/github/stars/nekox41/PT-Analytics-Next?style=flat-square&logo=github&color=8c9bd0)](https://github.com/nekox41/PT-Analytics-Next/stargazers)
+[![Downloads](https://img.shields.io/github/downloads/nekox41/PT-Analytics-Next/total?style=flat-square&label=downloads&color=6eaf46)](https://github.com/nekox41/PT-Analytics-Next/releases/latest)
+[![Download](https://img.shields.io/badge/Windows%20x64-Download-6eaf46?style=flat-square)](https://github.com/nekox41/PT-Analytics-Next/releases/latest)
+
+</div>
+
 PT Analytics Next 是独立的 Warframe 利润收割者日志分析工具。采用自行编写的 Rust 类型化事件解析器与四阶段战斗状态机，独立实现日志监听、异常恢复、本地存储和 Tauri 2 前端。
 
-[下载 Windows 版本](https://github.com/nekox41/PT-Analytics-Next/releases) · [构建状态](https://github.com/nekox41/PT-Analytics-Next/actions)
+[下载最新 Windows 版本](https://github.com/nekox41/PT-Analytics-Next/releases/latest) · [构建状态](https://github.com/nekox41/PT-Analytics-Next/actions)
 
 ## 功能
 
@@ -33,9 +44,10 @@ PT Analytics Next 是独立的 Warframe 利润收割者日志分析工具。采�
 
 ## 开发
 
-Windows 需要 Node.js 22、Rust stable、Visual Studio C++ Build Tools、WebView2 Runtime。
+Windows 需要 Node.js 22、Python 3.11+、Rust stable、Visual Studio C++ Build Tools、WebView2 Runtime。
 
 ```sh
+python -m pip install Pillow==11.3.0
 npm install
 npm run icons
 npm run check
@@ -59,6 +71,10 @@ ui/             # 独立前端
 ```
 
 目前以 Windows x64 为首发平台。首版暂未实现原应用的在线排行榜/提交、账号同步、截图及全局快捷键。计时依据可观察的游戏日志事件；已加入 2026-11-24 真实日志的脱敏事件回归样本（一次中止、一次完整任务），覆盖实际多行任务配置及四阶段计时；多人、异常信标和跨平台仍需进一步验证。数据库使用新的结构，不会覆盖原版应用数据。
+
+## 图标
+
+项目图标取意于利润收割者的毒素属性护盾：在竞速配装中，独立毒素伤害的覆盖具有特殊意义。绘画式毒素标志用于应用识别；PNG 用于项目主页，ICO 用于 Windows，SVG 用于前端（内嵌位图以保留原画笔触）。所有格式由同一张图生成。
 
 ## 许可证
 
