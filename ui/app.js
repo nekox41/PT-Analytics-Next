@@ -105,13 +105,13 @@ function phaseCards(r){
 }
 function renderHome(){
  const r=selected();if(!r){$("content").innerHTML=empty("clock","暂无任务记录","启动 Warframe 并完成利润收割者任务。软件将自动读取 EE.log，也可在设置中指定日志文件。");return}
- $("content").innerHTML='<div class="run-title"><span class="name">你的任务「'+esc(r.run_name)+'」</span>'+btn("edit","重命名","rename:"+r.run_id)+btn("copy","复制成绩图片","copy-image:"+r.run_id)+btn("document","复制英文文本战报","copy-text:"+r.run_id)+btn("star",r.favorite?"取消收藏":"收藏","favorite:"+r.run_id,r.favorite?'style="color:#ffbe5a"':"")+(lifecycle(r)!=="completed"?'<span class="warn" title="'+esc(reasonText(r))+'">'+esc(statusText(r))+'</span>':isPB(r)?'<span class="pb-label">最佳成绩！</span>':"")+'</div>'+roster(r)+(lifecycle(r)!=="completed"?'<p class="muted">'+esc(reasonText(r))+(lifecycle(r)==="interrupted"?" · 总耗时为最后可信战斗事件的下限":"")+(elapsed(r)==null?" · 缺少计时起点或旧记录耗时不完整":" · 分项仅包含已确认事件")+"</p>":"")+'<section id="result-cards">'+reportMetrics(r)+phaseCards(r)+'</section>';
+ $("content").innerHTML='<div class="run-title"><span class="name">你的任务「'+esc(r.run_name)+'」</span>'+btn("edit","重命名","rename:"+r.run_id)+btn("copy","复制成绩图片","copy-image:"+r.run_id)+btn("document","复制中文文本战报","copy-text:"+r.run_id)+btn("star",r.favorite?"取消收藏":"收藏","favorite:"+r.run_id,r.favorite?'style="color:#ffbe5a"':"")+(lifecycle(r)!=="completed"?'<span class="warn" title="'+esc(reasonText(r))+'">'+esc(statusText(r))+'</span>':isPB(r)?'<span class="pb-label">最佳成绩！</span>':"")+'</div>'+roster(r)+(lifecycle(r)!=="completed"?'<p class="muted">'+esc(reasonText(r))+(lifecycle(r)==="interrupted"?" · 总耗时为最后可信战斗事件的下限":"")+(elapsed(r)==null?" · 缺少计时起点或旧记录耗时不完整":" · 分项仅包含已确认事件")+"</p>":"")+'<section id="result-cards">'+reportMetrics(r)+phaseCards(r)+'</section>';
 }
 async function copyText(r){
  const text=Report.text(r);
  try{await invoke("copy_report_text",{text});}
  catch(nativeError){if(!navigator.clipboard?.writeText)throw nativeError;await navigator.clipboard.writeText(text);}
- toast("已复制英文文本战报");
+ toast("已复制中文文本战报");
 }
 async function copyImage(r){
  const icons=await Report.loadIcons(r);
@@ -161,13 +161,14 @@ function renderAnalytics(){
  $("chart-limit").value=String(state.chartLimit);$("chart-limit").onchange=e=>{state.chartLimit=Number(e.target.value);renderAnalytics()};
 }
 function renderSettings(){
- $("content").innerHTML='<div class="settings"><article class="settings-card"><h2>常规</h2><div class="setting-row"><div><b>界面主题</b><p>深色 / 浅色</p></div><button class="primary" data-action="theme">'+(state.light?"浅色":"深色")+'</button></div><div class="setting-row"><div><b>阶段布局</b><p>双列卡片或单列卡片</p></div><button data-action="layout">'+(state.single?"单列":"双列")+'</button></div></article><article class="settings-card"><h2>日志监听</h2><p class="muted">默认读取 Windows 用户目录下的 Warframe / EE.log，启动时回放历史记录，随后持续监听。</p><div class="path-control"><input id="log-path" placeholder="EE.log 的绝对路径" value="'+esc(state.status.path||"")+'"><button class="primary" data-action="save-path">保存</button><button data-action="reset-path">恢复默认</button></div><div class="setting-row"><span>连接状态</span><b id="setting-status"></b></div><div class="setting-row"><span>读取位置</span><span id="setting-offset" class="muted"></span></div><div id="setting-error" class="error"></div></article><article class="settings-card"><h2><img src="logo.svg" alt="" width="32" height="32" style="vertical-align:middle;border-radius:6px;margin-right:8px">关于 PT Analytics Next</h2><p>v0.1.7 · Tauri 2 / Rust · GPL-3.0-or-later</p><p class="muted">使用独立 Rust 日志解析核心及 Tauri 前端。所有任务数据仅保存在本地 SQLite 数据库。</p><p class="muted">非 Warframe 官方应用。</p></article></div>';
+ $("content").innerHTML='<div class="settings"><article class="settings-card"><h2>常规</h2><div class="setting-row"><div><b>界面主题</b><p>深色 / 浅色</p></div><button class="primary" data-action="theme">'+(state.light?"浅色":"深色")+'</button></div><div class="setting-row"><div><b>阶段布局</b><p>双列卡片或单列卡片</p></div><button data-action="layout">'+(state.single?"单列":"双列")+'</button></div></article><article class="settings-card"><h2>日志监听</h2><p class="muted">默认读取 Windows 用户目录下的 Warframe / EE.log，启动时回放历史记录，随后持续监听。</p><div class="path-control"><input id="log-path" placeholder="EE.log 的绝对路径" value="'+esc(state.status.path||"")+'"><button class="primary" data-action="save-path">保存</button><button data-action="reset-path">恢复默认</button></div><div class="setting-row"><span>连接状态</span><b id="setting-status"></b></div><div class="setting-row"><span>读取位置</span><span id="setting-offset" class="muted"></span></div><div id="setting-error" class="error"></div></article><article class="settings-card"><h2><img src="logo.svg" alt="" width="32" height="32" style="vertical-align:middle;border-radius:6px;margin-right:8px">关于 PT Analytics Next</h2><p>v0.1.8 · MIT License</p><p>Aameow&ChatGPT 开发的高性能、稳定且可靠的大蜘蛛竞速工具，基于 Tauri2。</p><p class="muted">非 Warframe 官方应用。第三方游戏素材保留原权利。</p><div class="about-links"><button class="primary" data-action="github:repository">GitHub 仓库</button><button class="outline" data-action="github:author">Aameow 的 GitHub</button></div></article></div>';
 }
 function openDialog(title,description,value,action){$("dialog-title").textContent=title;$("dialog-description").textContent=description;$("dialog-input").hidden=value===null;$("dialog-input").value=value??"";dialogAction=action;$("edit").showModal();if(value!==null){$("dialog-input").focus();$("dialog-input").select()}}
 $("dialog-cancel").onclick=()=>$("edit").close();
 $("edit-form").onsubmit=async e=>{e.preventDefault();try{await dialogAction?.($("dialog-input").value);$("edit").close();await refresh(true)}catch(err){toast(String(err))}};
 async function action(a){
  const [cmd,arg]=a.split(":");const id=Number(arg),r=state.runs.find(x=>x.run_id===id);
+ if(cmd==="github"){await invoke("open_github",{destination:arg});return}
  if(cmd==="page"){state.page=arg;render();return}
  if(cmd==="theme"){state.light=!state.light;localStorage.setItem("light",state.light?"1":"0");render();return}
  if(cmd==="layout"){state.single=!state.single;localStorage.setItem("single",state.single?"1":"0");render();return}
@@ -187,4 +188,16 @@ async function action(a){
 document.addEventListener("click",e=>{const b=e.target.closest("[data-action]");if(b&&!b.disabled)action(b.dataset.action).catch(err=>toast(String(err)))});
 document.addEventListener("change",e=>{if(e.target.matches("[data-select]")){const id=Number(e.target.dataset.select);e.target.checked?state.chosen.add(id):state.chosen.delete(id);renderStorage()}});
 document.addEventListener("keydown",e=>{if(state.page==="home"&&!["INPUT","SELECT","TEXTAREA"].includes(e.target.tagName)&&!$("edit").open){if(e.key==="ArrowLeft")action("older");if(e.key==="ArrowRight")action("newer")}});
+async function showStarPrompt(){
+ try {
+  if($("edit").open){setTimeout(showStarPrompt,1000);return;}
+  if(await invoke("claim_star_prompt"))$("star-prompt").showModal();
+ } catch(e){console.warn("Star prompt:",e);}
+}
+$("star-dismiss").onclick=()=>$("star-prompt").close();
+$("star-visit").onclick=async()=>{
+ try{await invoke("open_github",{destination:"repository"});$("star-prompt").close();}
+ catch(e){toast(String(e));}
+};
 render();refresh(true);setInterval(()=>refresh(),750);
+setTimeout(showStarPrompt,900);

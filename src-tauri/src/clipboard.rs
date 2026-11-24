@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: MIT
 //! Native clipboard fallback, keeping PNG alpha and providing a Windows bitmap format.
 #[tauri::command]
 pub fn copy_report_text(text: String) -> Result<(), String> {

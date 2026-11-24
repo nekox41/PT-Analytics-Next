@@ -15,49 +15,48 @@ test("correct phase rows and cumulative values",()=>{
  assert.deepEqual(p.map(x=>x.rows.map(y=>y.type)),[["shield","leg","body","pylon"],["leg","body"],["shield","leg","body","pylon"],["shield","leg","body"]]);
  assert.deepEqual(p.map(x=>R.fmt(x.cumulative)),["40.692","57.654","81.775","93.882"]);
 });
-test("PTA-style exact report",()=>{
+test("exact Chinese report",()=>{
  const text=R.text(run());
  const expected=[
  "",
  "-".repeat(72),
- "Profit-Taker Run #2 by LocalTester cleared in 1m 33s 882ms",
+ "利润收割者 Run #2 · LocalTester · 完成，用时 1分 33秒 882毫秒",
  "",
- "From elevator to Profit-Taker took 14.020s. Fight duration: 1m 19s 862ms.",
+ "从电梯到利润收割者耗时 14.020s。战斗耗时：1分 19秒 862毫秒。",
  "",
- "> Phase 1 [26.672]",
- " Shield change:   7.636s - Puncture 7.586s | Magnetic 0.049s | Radiation 0.000s | Viral 0.001s",
- " Leg break:       2.406s - 1.713s | 0.158s | 0.376s | 0.159s",
- " Body killed:     0.351s",
- " Pylons:          9.445s",
+ "> 第一阶段 [26.672s]",
+ " 破盾：    7.636s - 穿刺 7.586s | 磁力 0.049s | 辐射 0.000s | 病毒 0.001s",
+ " 破腿：    2.406s - 1.713s | 0.158s | 0.376s | 0.159s",
+ " 本体击杀：0.351s",
+ " 信标：    9.445s",
  "",
- "> Phase 2 [16.962]",
- " Leg break:       14.650s - 13.915s | 0.216s | 0.418s | 0.101s",
- " Body killed:     0.067s",
+ "> 第二阶段 [16.962s]",
+ " 破腿：    14.650s - 13.915s | 0.216s | 0.418s | 0.101s",
+ " 本体击杀：0.067s",
  "",
- "> Phase 3 [24.121]",
- " Shield change:   4.078s - Blast 1.525s | Corrosive 1.833s | Gas 0.000s | Slash 0.035s | Impact 0.660s | Electric 0.025s",
- " Leg break:       2.095s - 1.441s | 0.109s | 0.386s | 0.159s",
- " Body killed:     0.017s",
- " Pylons:          10.100s",
+ "> 第三阶段 [24.121s]",
+ " 破盾：    4.078s - 爆炸 1.525s | 腐蚀 1.833s | 毒气 0.000s | 切割 0.035s | 冲击 0.660s | 电击 0.025s",
+ " 破腿：    2.095s - 1.441s | 0.109s | 0.386s | 0.159s",
+ " 本体击杀：0.017s",
+ " 信标：    10.100s",
  "",
- "> Phase 4 [12.107]",
- " Shield change:   6.341s - Toxin 4.975s | Heat 1.290s | Cold 0.075s | Puncture 0.000s | Magnetic 0.001s",
- " Leg break:       3.385s - 1.190s | 0.477s | 0.794s | 0.924s",
- " Body killed:     0.135s",
+ "> 第四阶段 [12.107s]",
+ " 破盾：    6.341s - 毒素 4.975s | 火焰 1.290s | 冰冻 0.075s | 穿刺 0.000s | 磁力 0.001s",
+ " 破腿：    3.385s - 1.190s | 0.477s | 0.794s | 0.924s",
+ " 本体击杀：0.135s",
  "",
- "> Sum of parts [60.706]",
- " Shield change:  18.055s",
- " Leg Break:      22.536s",
- " Body Killed:    0.570s",
- " Pylons:         19.545s",
+ "> 分项合计 [60.706s]",
+ " 破盾：    18.055s",
+ " 破腿：    22.536s",
+ " 本体击杀：0.570s",
+ " 信标：    19.545s",
  "-".repeat(72),
  ""].join("\n");
- // PTA has a 72-character separator and fixed column widths.
  assert.equal(text,expected);
 });
-test("partial and multiplayer reports are not marked cleared",()=>{
+test("partial and multiplayer Chinese reports are not marked cleared",()=>{
  const r=run();r.lifecycle="interrupted";r.elapsed_seconds=40.5;r.phases=r.phases.slice(0,2);r.phases[1].complete=false;r.squad_members=[{member_name:"Peer"}];
- const t=R.text(r);assert.match(t,/interrupted after at least 0m 40s 500ms/);assert.match(t,/Participants: LocalTester \(self\) \| Peer/);assert.match(t,/Phase 2 \[16.962\] \(incomplete\)/);assert.doesNotMatch(t,/cleared in|> Phase 3/);
+ const t=R.text(r);assert.match(t,/意外中断，用时 至少 0分 40秒 500毫秒/);assert.match(t,/参与玩家：LocalTester（自己） \| Peer/);assert.match(t,/第二阶段 \[16.962s\]（未完成）/);assert.doesNotMatch(t,/完成，用时|> 第三阶段/);
 });
 test("comparison is meaningful only between valid runs",()=>{
  const a=run(),b=run();b.elapsed_seconds=100;assert.equal(R.deltaText(R.metricValues(a,b)[0].delta),"-6.118s");

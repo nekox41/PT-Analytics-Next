@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: MIT
 //! Translate external log text into typed observations without mutating fight state.
 use crate::models::{Damage, Leg};
 use chrono::{Local, NaiveDateTime, TimeZone};

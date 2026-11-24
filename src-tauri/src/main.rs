@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: MIT
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod models; mod events;
 mod engine; mod tail; mod store; mod clipboard;
@@ -101,11 +101,26 @@ fn set_log_path(s: State<'_, Arc<Shared>>, path: String) -> Result<(), String> {
     lock(&s.store).set_path(&p.to_string_lossy())?;
     *lock(&s.path)=p; Ok(())
 }
+#[tauri::command]
+fn open_github(destination: String) -> Result<(),String> {
+    let url=match destination.as_str() {
+        "repository"=>"https://github.com/nekox41/PT-Analytics-Next",
+        "author"=>"https://github.com/nekox41",
+        _=>return Err("不支持的链接".into()),
+    };
+    tauri_plugin_opener::open_url(url,None::<&str>).map_err(|e|e.to_string())
+}
+#[tauri::command]
+fn claim_star_prompt(s: State<'_, Arc<Shared>>) -> Result<bool,String> {
+    lock(&s.store).claim_star_prompt()
+}
 fn main() {
     tauri::Builder::default().setup(|app| {
         let dir=app.path().app_local_data_dir()?;
         std::fs::create_dir_all(&dir)?;
         let store=Store::open(&dir.join("runs.sqlite3")).map_err(std::io::Error::other)?;
+        // Count process launches, not page reloads or polling. A prompt failure must not block log parsing.
+        if let Err(e)=store.register_launch(){eprintln!("launch counter: {e}");}
         let path=store.path().map(PathBuf::from).unwrap_or_else(default_path);
         let shared=Arc::new(Shared { path: Mutex::new(path.clone()), store: Mutex::new(store),
             status: Mutex::new(Status { path:path.to_string_lossy().into_owned(), mode:"waiting".into(), ..Status::default() }) });
@@ -118,6 +133,6 @@ fn main() {
             }
         })?;
         Ok(())
-    }).invoke_handler(tauri::generate_handler![get_status,get_runs,rename_run,favorite_run,delete_run,set_log_path,clipboard::copy_report_text,clipboard::copy_report_image])
+    }).invoke_handler(tauri::generate_handler![get_status,get_runs,rename_run,favorite_run,delete_run,set_log_path,clipboard::copy_report_text,clipboard::copy_report_image,open_github,claim_star_prompt])
       .run(tauri::generate_context!()).expect("failed to start PT Analytics Next");
 }

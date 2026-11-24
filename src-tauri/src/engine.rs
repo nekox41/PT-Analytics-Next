@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: MIT
 //! Deterministic, typed fight state machine. No log-derived panic paths.
 use crate::{events::{self, Event, Observation}, models::*};
 

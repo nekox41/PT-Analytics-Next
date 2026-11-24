@@ -1,13 +1,14 @@
 [package]
 name = "pt-analytics-next"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2021"
-license = "GPL-3.0-or-later"
+license = "MIT"
 description = "Resilient local Profit-Taker run analytics"
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = "0.4"

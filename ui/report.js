@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-or-later */
+/* SPDX-License-Identifier: MIT */
 "use strict";
 const Report = (() => {
  const metrics=[
@@ -16,6 +16,7 @@ const Report = (() => {
  const types={1:["shield","leg","body","pylon"],2:["leg","body"],3:["shield","leg","body","pylon"],4:["shield","leg","body"]};
  const legNames={FrontLeft:"FL",FrontRight:"FR",BackLeft:"BL",BackRight:"BR"};
  const damageNames={Impact:"Impact",Puncture:"Puncture",Slash:"Slash",Heat:"Heat",Cold:"Cold",Electric:"Electric",Toxin:"Toxin",Blast:"Blast",Radiation:"Radiation",Gas:"Gas",Magnetic:"Magnetic",Viral:"Viral",Corrosive:"Corrosive",NoShield:"None"};
+ const damageCn={Impact:"冲击",Puncture:"穿刺",Slash:"切割",Heat:"火焰",Cold:"冰冻",Electric:"电击",Toxin:"毒素",Blast:"爆炸",Radiation:"辐射",Gas:"毒气",Magnetic:"磁力",Viral:"病毒",Corrosive:"腐蚀",None:"无"};
  const damageFiles=["Impact","Puncture","Slash","Heat","Cold","Electric","Toxin","Blast","Radiation","Gas","Magnetic","Viral","Corrosive"];
  const damageIcon=name=>damageFiles.includes(name)?"damage-icons/"+name+".png":null;
  const iconCache=new Map();
@@ -51,9 +52,9 @@ const Report = (() => {
   });
  }
  function duration(t){
-  if(!Number.isFinite(t))return "unknown time";
+  if(!Number.isFinite(t))return "耗时未知";
   const ms=Math.round(Math.max(0,t)*1000),m=Math.floor(ms/60000),s=Math.floor(ms/1000)%60;
-  return m+"m "+s+"s "+(ms%1000)+"ms";
+  return m+"分 "+s+"秒 "+(ms%1000)+"毫秒";
  }
  function metricValues(r,previous){
   const compare=eligible(r)&&previous&&eligible(previous);
@@ -66,24 +67,25 @@ const Report = (() => {
  function deltaText(d){return Number.isFinite(d)?(d>0?"+":d<0?"-":"")+fmt(Math.abs(d))+"s":"";}
  function plain(s){return String(s??"").replace(/[\r\n\t]+/g," ").trim();}
  function text(r){
-  const bar="-".repeat(72),total=elapsed(r),status=life(r),player=r.self_verified&&r.player_name?plain(r.player_name):"Unknown player";
+  const bar="-".repeat(72),total=elapsed(r),status=life(r),player=r.self_verified&&r.player_name?plain(r.player_name):"未知玩家";
   const name=plain(r.run_name)||("Run #"+r.run_id);
-  const headline=status==="completed"?"cleared in "+duration(total):({aborted:"aborted",interrupted:"interrupted",invalid:"invalid"}[status]||status)+(Number.isFinite(total)?" after "+(status==="interrupted"?"at least ":"")+duration(total):" (elapsed unknown)");
-  const lines=["",bar,"Profit-Taker "+name+" by "+player+" "+headline];
+  const headline=status==="completed"?"完成，用时 "+duration(total):({aborted:"主动中止",interrupted:"意外中断",invalid:"数据异常"}[status]||"状态未知")+(Number.isFinite(total)?"，用时 "+(status==="interrupted"?"至少 ":"")+duration(total):"（耗时未知）");
+  const lines=["",bar,"利润收割者 "+name+" · "+player+" · "+headline];
   const peers=[...new Set([!r.self_verified?r.player_name:"",...(r.squad_members||[]).map(p=>p.member_name)].filter(Boolean).map(plain))];
-  if(peers.length)lines.push("Participants: "+[...(r.self_verified?[player+" (self)"]:[]),...peers].join(" | "));
+  if(peers.length)lines.push("参与玩家："+[...(r.self_verified?[player+"（自己）"]:[]),...peers].join(" | "));
   lines.push("");
-  if(Number.isFinite(total)&&Number.isFinite(r.total_times.total_flight_time)&&r.phases.length)lines.push("From elevator to Profit-Taker took "+sec(r.total_times.total_flight_time)+". Fight duration: "+duration(Math.max(0,total-r.total_times.total_flight_time))+".");
-  else lines.push("Flight and fight duration: incomplete evidence.");
-  const rowText=(label,value)=>" "+(label+":").padEnd(17)+sec(value);
+  if(Number.isFinite(total)&&Number.isFinite(r.total_times.total_flight_time)&&r.phases.length)lines.push("从电梯到利润收割者耗时 "+sec(r.total_times.total_flight_time)+"。战斗"+(status==="completed"?"耗时":"已记录耗时")+"："+(status==="interrupted"?"至少 ":"")+duration(Math.max(0,total-r.total_times.total_flight_time))+"。");
+  else lines.push("飞行及战斗耗时：日志证据不足。");
+  const labels={shield:"破盾",leg:"破腿",body:"本体击杀",pylon:"信标"};
+  const rowText=(label,value)=>" "+label+"："+(label.length===2?"    ":"")+sec(value);
   for(const phase of phases(r)){
    if(phase.missing)continue;
-   lines.push("","> Phase "+phase.number+" ["+fmt(phase.duration)+"]"+(phase.complete?"":" (incomplete)"));
-   for(const row of phase.rows)lines.push(rowText(row.en,row.value)+(row.splits.length?" - "+row.splits.map(s=>(row.type==="shield"?s.name+" ":"")+sec(s.time)).join(" | "):""));
+   lines.push("","> "+phase.name+" ["+fmt(phase.duration)+"s]"+(phase.complete?"":"（未完成）"));
+   for(const row of phase.rows)lines.push(rowText(labels[row.type],row.value)+(row.splits.length?" - "+row.splits.map(s=>(row.type==="shield"?(damageCn[s.name]||"未知属性")+" ":"")+sec(s.time)).join(" | "):""));
   }
   const totals=r.total_times,values=[totals.total_shield_time,totals.total_leg_time,totals.total_body_time,totals.total_pylon_time];
-  lines.push("","> Sum of parts ["+fmt(values.every(Number.isFinite)?values.reduce((a,b)=>a+b,0):null)+"]");
-  ["Shield change","Leg Break","Body Killed","Pylons"].forEach((label,i)=>lines.push(" "+(label+":").padEnd(16)+sec(values[i])));
+  lines.push("","> 分项合计 ["+fmt(values.every(Number.isFinite)?values.reduce((a,b)=>a+b,0):null)+"s]");
+  ["破盾","破腿","本体击杀","信标"].forEach((label,i)=>lines.push(rowText(label,values[i])));
   lines.push(bar,"");return lines.join("\n");
  }
  // Dedicated export layout; no DOM rasterization, remote resources or opaque page background.

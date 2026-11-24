@@ -1,8 +1,8 @@
 {
   "name": "pt-analytics-next",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
-  "license": "GPL-3.0-or-later",
+  "license": "MIT",
   "scripts": {
     "tauri": "tauri",
     "icons": "python scripts/generate_icons.py && python scripts/fetch_damage_icons.py && tauri icon assets/logo.png",

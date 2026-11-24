@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: MIT
 use crate::{engine::Completed, models::Run};
 use rusqlite::{Connection, params};
 use serde::Serialize;
@@ -76,6 +76,15 @@ impl Store {
         } else { tx.execute("DELETE FROM settings WHERE key='checkpoint'",[]).map_err(err)?; }
         tx.commit().map_err(err)
     }
+    pub fn register_launch(&self) -> Result<(),String> {
+        self.conn.execute("INSERT INTO settings(key,value) VALUES ('app_launch_count','1') ON CONFLICT(key) DO UPDATE SET value=CAST(MIN(10,MAX(0,CAST(value AS INTEGER))+1) AS TEXT)",[]).map_err(err)?;
+        Ok(())
+    }
+    // Atomic claim prevents duplicate prompts across reloads and multiple processes.
+    pub fn claim_star_prompt(&self) -> Result<bool,String> {
+        let changed=self.conn.execute("INSERT OR IGNORE INTO settings(key,value) SELECT 'star_prompt_shown','1' WHERE EXISTS (SELECT 1 FROM settings WHERE key='app_launch_count' AND CAST(value AS INTEGER)>=10)",[]).map_err(err)?;
+        Ok(changed==1)
+    }
     pub fn path(&self) -> Option<String> {
         self.conn.query_row("SELECT value FROM settings WHERE key='log_path'", [], |r| r.get(0)).ok()
     }
@@ -87,6 +96,22 @@ fn err(e: impl std::fmt::Display) -> String { e.to_string() }
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn star_prompt_only_once_on_tenth_launch_and_persists() {
+        let d=tempfile::tempdir().unwrap(); let path=d.path().join("test.sqlite3");
+        for _ in 0..9 {
+            let s=Store::open(&path).unwrap();s.register_launch().unwrap();
+            assert!(!s.claim_star_prompt().unwrap());
+        }
+        {
+            let s=Store::open(&path).unwrap();s.register_launch().unwrap();
+            assert!(s.claim_star_prompt().unwrap());assert!(!s.claim_star_prompt().unwrap());
+        }
+        for _ in 0..3 {
+            let s=Store::open(&path).unwrap();s.register_launch().unwrap();
+            assert!(!s.claim_star_prompt().unwrap());
+        }
+    }
     #[test]
     fn checkpoint_is_not_history_until_session_is_lost() {
         use crate::models::{Lifecycle,EndReason};

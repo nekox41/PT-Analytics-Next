@@ -13,7 +13,7 @@
 
 </div>
 
-PT Analytics Next 是独立的 Warframe 利润收割者日志分析工具。采用自行编写的 Rust 类型化事件解析器与四阶段战斗状态机，独立实现日志监听、异常恢复、本地存储和 Tauri 2 前端。
+Aameow&ChatGPT 开发的高性能、稳定且可靠的大蜘蛛竞速工具，基于 Tauri2。采用自行编写的 Rust 类型化事件解析器与四阶段战斗状态机，独立实现日志监听、异常恢复、本地存储和 Tauri 2 前端。
 
 [下载最新 Windows 版本](https://github.com/nekox41/PT-Analytics-Next/releases/latest) · [构建状态](https://github.com/nekox41/PT-Analytics-Next/actions)
 
@@ -33,7 +33,7 @@ PT Analytics Next 是独立的 Warframe 利润收割者日志分析工具。采�
 - 不需要原版 Flutter 应用、在线账号或远程服务。
 
 - 成绩卡片按阶段显示实际机制（第二阶段仅破腿、本体；第四阶段无信标），同时显示单阶段和累计耗时。
-- 一键复制透明背景成绩图片（适配当前主题与布局）、PTA 风格英文文本战报；与上一场有效记录比较耗时差值。
+- 一键复制透明背景成绩图片（适配当前主题与布局）、中文文本战报；与上一场有效记录比较耗时差值。
 
 ## 使用
 
@@ -97,7 +97,9 @@ ui/             # 独立前端
 
 ## 许可证
 
-GPL-3.0-or-later，详见 [LICENSE](LICENSE)。非 Warframe 官方产品。
+当前独立实现的项目代码采用 [MIT](LICENSE) 许可证。此前含 GPL 派生代码的历史版本继续适用其原授权（[历史 GPL 文本](LICENSE-GPL-HISTORICAL)）；第三方游戏素材不属于 MIT 授权范围。非 Warframe 官方产品。
+
+开发者：[Aameow](https://github.com/nekox41) & ChatGPT。
 
 ## 参考项目
 

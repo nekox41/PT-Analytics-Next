@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: MIT
 use std::{fs::File, io::{self, Read, Seek, SeekFrom}, path::Path};
 use same_file::Handle;
 const CHUNK: usize = 64 * 1024;
