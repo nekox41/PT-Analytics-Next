@@ -56,6 +56,7 @@ bash build-release.sh --bootstrap
 
 - 默认进行本地 Windows x64 原生构建、前端及 Rust 回归测试、安装包打包、源码归档、SHA256 校验和 GitHub Release 发布。
 - `bash build-release.sh --build-only` 只构建到 `dist/`，无需登录 GitHub。
+- `bash build-release.sh --check-only` 仅使用 Windows PowerShell 自带解析器检查脚本语法，不安装依赖、不编译、不发布；正常构建也会自动执行语法预检。
 - `bash build-release.sh --help` 查看参数。脚本从已提交 HEAD 构建，发布时要求 HEAD 与远程 master 一致，版本未发布且标签不存在，不覆盖已有 Release。
 - WSL 负责发起构建、校验及发布；MSVC、Tauri、NSIS 通过 Windows PowerShell 原生执行，避免 Linux 交叉编译的 NSIS 插件兼容问题。源码临时复制到 Windows 本地目录，避免 UNC 路径问题。
 - 首次构建从 browse.wf 获取原始护盾素材；后续复用本地已验证 PNG。构建产物包括全部图片资源及依赖锁文件，运行软件不联网。

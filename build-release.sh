@@ -7,12 +7,14 @@ REPO=nekox41/PT-Analytics-Next
 TARGET_BRANCH=master
 publish=1
 bootstrap=0
+check_only=0
 usage() {
     cat <<'EOF'
-Usage: bash build-release.sh [--build-only] [--bootstrap]
+Usage: bash build-release.sh [--build-only] [--bootstrap] [--check-only]
   Default: build Windows x64 portable EXE + NSIS, test, create GitHub Release.
   --build-only  Do not publish, only place binaries/source/checksums in dist/.
   --bootstrap   Install missing Windows tools (winget optional) and missing WSL gh via apt.
+  --check-only  Check PowerShell syntax only; no installs, builds or publishing.
   --help        Show this message.
 Build runs on native Windows through WSL interop, not on GitHub Actions.
 EOF
@@ -21,6 +23,7 @@ while (($#)); do
     case "$1" in
         --build-only) publish=0 ;;
         --bootstrap) bootstrap=1 ;;
+        --check-only) check_only=1; publish=0 ;;
         --help|-h) usage; exit 0 ;;
         *) usage >&2; exit 2 ;;
     esac
@@ -69,6 +72,12 @@ cleanup() {
 trap cleanup EXIT
 git archive --format=tar "$head" | tar -xf - -C "$stage"
 git ls-tree -r -z --name-only "$head" > "$stage/.tracked-manifest"
+bash -n "$stage/build-release.sh"
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$(wslpath -w "$stage/scripts/check-powershell.ps1")"
+if ((check_only)); then
+    printf 'Build script syntax checks passed.\n'
+    exit 0
+fi
 if [[ -d "$ROOT/ui/damage-icons" ]]; then
     mkdir -p "$stage/ui/damage-icons"
     cp -a "$ROOT/ui/damage-icons/." "$stage/ui/damage-icons/"
