@@ -165,9 +165,9 @@ pub fn requested(s:&Arc<Shared>)->bool {
     let o=lock(&s.overlay);o.ready&&(o.config.enabled||o.editing)
 }
 #[tauri::command]
-pub async fn get_overlay_settings(s:State<'_,Arc<Shared>>)->Settings {lock(&s.overlay).settings()}
+pub async fn get_overlay_settings(s:State<'_,Arc<Shared>>)->Result<Settings,String> {Ok(lock(&s.overlay).settings())}
 #[tauri::command]
-pub async fn get_overlay_frame(s:State<'_,Arc<Shared>>)->Frame {lock(&s.overlay).frame()}
+pub async fn get_overlay_frame(s:State<'_,Arc<Shared>>)->Result<Frame,String> {Ok(lock(&s.overlay).frame())}
 #[tauri::command]
 pub async fn set_overlay_settings(app:AppHandle,s:State<'_,Arc<Shared>>,mut config:Config)->Result<Settings,String>{
     config.normalize();
