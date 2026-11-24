@@ -52,7 +52,7 @@ cd PT-Analytics-Next
 bash build-release.sh --bootstrap
 ```
 
-首次 `--bootstrap` 可通过 apt 安装 WSL GitHub CLI，通过 Windows winget 安装缺失的 Node.js、Python、Rustup、Visual Studio 2022 C++ Build Tools。安装需网络及磁盘空间，某些系统可能需要管理员确认、重启或手动安装 Windows SDK。已有环境可直接运行 `bash build-release.sh`。GitHub CLI 首次使用会引导网页登录，需拥有仓库 Release 写入权限。
+首次 `--bootstrap` 可通过 apt 安装 WSL GitHub CLI，自动安装缺失的 Node.js、Python、Rustup、Visual Studio 2022 C++ Build Tools。winget 可用时优先使用；不存在或安装失败时，直接使用官方安装包（校验 SHA256 或数字签名），不依赖 Microsoft Store / App Installer。安装需网络及磁盘空间，某些系统可能需要管理员确认、重启或手动安装 Windows SDK。已有环境可直接运行 `bash build-release.sh`。GitHub CLI 首次使用会引导网页登录，需拥有仓库 Release 写入权限。
 
 - 默认进行本地 Windows x64 原生构建、前端及 Rust 回归测试、安装包打包、源码归档、SHA256 校验和 GitHub Release 发布。
 - `bash build-release.sh --build-only` 只构建到 `dist/`，无需登录 GitHub。

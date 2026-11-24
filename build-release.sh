@@ -12,7 +12,7 @@ usage() {
 Usage: bash build-release.sh [--build-only] [--bootstrap]
   Default: build Windows x64 portable EXE + NSIS, test, create GitHub Release.
   --build-only  Do not publish, only place binaries/source/checksums in dist/.
-  --bootstrap   Install missing Windows tools with winget and missing WSL gh via apt.
+  --bootstrap   Install missing Windows tools (winget optional) and missing WSL gh via apt.
   --help        Show this message.
 Build runs on native Windows through WSL interop, not on GitHub Actions.
 EOF
