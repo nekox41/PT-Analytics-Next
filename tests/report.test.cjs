@@ -67,6 +67,32 @@ test("canvas export draws transparent gaps and fixed layout without DOM screensh
  const boxes=[],texts=[];const ctx={font:"",fillStyle:"",scale(){},beginPath(){},roundRect(...x){boxes.push(x)},fill(){},stroke(){},arc(){},moveTo(){},lineTo(){},measureText(s){return {width:String(s).length*7}},fillText(s){texts.push(s)}};
  const canvas={getContext(){return ctx}};
  global.document={createElement(){return canvas}};
- try{const result=R.canvas(run(),{light:true});assert.equal(result.width,2676);assert.equal(result.height,978);assert.equal(boxes.length,16);assert.equal(boxes[0][0],0);assert.ok(boxes[2][0]>boxes[0][2]);assert.ok(texts.includes("93.882"));assert.ok(texts.includes("26.672s /"));assert.ok(!texts.includes("NaN"));}
+ try{const result=R.canvas(run(),{light:true,icons:new Map()});assert.equal(result.width,2676);assert.ok(result.height>=978);assert.equal(boxes.length,16);assert.equal(boxes[0][0],0);assert.ok(boxes[2][0]>boxes[0][2]);assert.ok(texts.includes("93.882"));assert.ok(texts.includes("26.672s /"));assert.ok(!texts.includes("NaN"));}
  finally{delete global.document;}
+});
+
+test("all 13 shield types use original asset paths, no improvised glyphs",()=>{
+ const keys=["Impact","Puncture","Slash","Heat","Cold","Electric","Toxin","Blast","Radiation","Gas","Magnetic","Viral","Corrosive"];
+ for(const k of keys)assert.equal(R.damageIcon(k),"damage-icons/"+k+".png");
+ assert.equal(R.damageIcon("NoShield"),null);assert.equal(R.damageIcon("../other"),null);
+ const row=R.phases(run())[0].rows[0];assert.equal(row.splits[0].icon,"damage-icons/Puncture.png");assert.equal(row.splits[0].symbol,"Puncture");
+});
+
+test("export draws original image masks for shield splits rather than glyph text",()=>{
+ const draws=[],texts=[],masks=[];
+ const ctx={font:"",fillStyle:"",scale(){},beginPath(){},roundRect(){},fill(){},stroke(){},arc(){},moveTo(){},lineTo(){},measureText(s){return {width:String(s).length*7}},fillText(s){texts.push(s)},drawImage(...args){draws.push(args)}};
+ const canvas={getContext(){return ctx}};
+ let first=true;
+ global.document={createElement(){
+   if(first){first=false;return canvas}
+   const m={drawImage(...args){masks.push(args)},fillRect(){}};
+   return {getContext(){return m}};
+ }};
+ const icons=new Map(["Impact","Puncture","Slash","Heat","Cold","Electric","Toxin","Blast","Radiation","Gas","Magnetic","Viral","Corrosive"].map(k=>[k,{naturalWidth:32,naturalHeight:32,name:k}]));
+ try{
+  R.canvas(run(),{light:true,icons});
+  assert.equal(draws.length,15);assert.equal(masks.length,15);
+  assert.ok(masks.some(x=>x[0].name==="Puncture"));
+  assert.ok(!texts.includes("Puncture"));
+ }finally{delete global.document;}
 });

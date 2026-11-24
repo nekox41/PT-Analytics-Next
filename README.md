@@ -42,6 +42,25 @@ PT Analytics Next 是独立的 Warframe 利润收割者日志分析工具。采�
 3. 如未找到日志，在设置中指定 EE.log 的绝对路径。
 4. 数据保存在应用本地数据目录下的 runs.sqlite3 中。删除记录会保留去重标记，避免重启时重新导入。
 
+## WSL2 一键构建与发布
+
+在 WSL2 Ubuntu 22.04 中执行（Windows interop 须已启用）：
+
+```bash
+git clone https://github.com/nekox41/PT-Analytics-Next.git
+cd PT-Analytics-Next
+bash build-release.sh --bootstrap
+```
+
+首次 `--bootstrap` 可通过 apt 安装 WSL GitHub CLI，通过 Windows winget 安装缺失的 Node.js、Python、Rustup、Visual Studio 2022 C++ Build Tools。安装需网络及磁盘空间，某些系统可能需要管理员确认、重启或手动安装 Windows SDK。已有环境可直接运行 `bash build-release.sh`。GitHub CLI 首次使用会引导网页登录，需拥有仓库 Release 写入权限。
+
+- 默认进行本地 Windows x64 原生构建、前端及 Rust 回归测试、安装包打包、源码归档、SHA256 校验和 GitHub Release 发布。
+- `bash build-release.sh --build-only` 只构建到 `dist/`，无需登录 GitHub。
+- `bash build-release.sh --help` 查看参数。脚本从已提交 HEAD 构建，发布时要求 HEAD 与远程 master 一致，版本未发布且标签不存在，不覆盖已有 Release。
+- WSL 负责发起构建、校验及发布；MSVC、Tauri、NSIS 通过 Windows PowerShell 原生执行，避免 Linux 交叉编译的 NSIS 插件兼容问题。源码临时复制到 Windows 本地目录，避免 UNC 路径问题。
+- 首次构建从 browse.wf 获取原始护盾素材；后续复用本地已验证 PNG。构建产物包括全部图片资源及依赖锁文件，运行软件不联网。
+- GitHub Actions 已改为手动运行，默认仅构建产物，选择 publish 才发布，不再因 push 消耗额度。
+
 ## 开发
 
 Windows 需要 Node.js 22、Python 3.11+、Rust stable、Visual Studio C++ Build Tools、WebView2 Runtime。
@@ -74,7 +93,7 @@ ui/             # 独立前端
 
 ## 图标
 
-项目图标取意于利润收割者的毒素属性护盾：在竞速配装中，独立毒素伤害的覆盖具有特殊意义。绘画式毒素标志用于应用识别；PNG 用于项目主页，ICO 用于 Windows，SVG 用于前端（内嵌位图以保留原画笔触）。所有格式由同一张图生成。
+项目图标取意于利润收割者的毒素属性护盾：在竞速配装中，独立毒素伤害的覆盖具有特殊意义。绘画式毒素标志用于应用识别；PNG 用于项目主页，ICO 用于 Windows，SVG 用于前端（内嵌位图以保留原画笔触）。所有格式由同一张图生成。护盾伤害图标使用 Warframe 原始文本图标，来源为 [browse.wf](https://browse.wf/text-icons)，详见 [素材来源及授权说明](assets/DAMAGE-ICONS.md)。
 
 ## 许可证
 

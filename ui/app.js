@@ -100,7 +100,7 @@ function phaseCards(r){
  return '<div class="phase-grid '+(state.single?"single":"")+'">'+Report.phases(r).map(p=>{
  if(p.missing)return '<article class="phase"><div class="phase-head"><span>'+p.name+'</span><strong>—</strong></div><span class="muted">无阶段数据</span></article>';
  return '<article class="phase"><div class="phase-head"><span>'+p.name+(p.complete?"":' <span class="warn">未完成</span>')+'</span><span class="phase-duration">'+fmt(p.duration)+'s / <strong>'+fmt(p.cumulative)+'s</strong></span></div><div class="phase-details">'+p.rows.map(row=>
- '<div class="phase-detail-row"><div class="phase-detail-summary"><span>'+row.cn+'</span><span>'+fmt(row.value)+'</span></div><div class="split-row">'+row.splits.map(s=>'<span class="split" title="'+esc(s.type==="shield"?shieldNames[s.name]||s.name:s.name)+'"><b class="'+(s.type==="shield"?'damage-glyph':'')+'">'+esc(s.symbol)+'</b>'+fmt(s.time)+'</span>').join("")+'</div></div>').join("")+'</div></article>';
+ '<div class="phase-detail-row"><div class="phase-detail-summary"><span>'+row.cn+'</span><span>'+fmt(row.value)+'</span></div><div class="split-row">'+row.splits.map(s=>'<span class="split" title="'+esc(s.type==="shield"?shieldNames[s.name]||s.name:s.name)+'">'+(s.icon?'<span class="damage-icon" role="img" aria-label="'+esc(shieldNames[s.name]||s.name)+'" style="--damage-image:url('+esc(s.icon)+')"></span>':'<b>'+esc(s.symbol)+'</b>')+fmt(s.time)+'</span>').join("")+'</div></div>').join("")+'</div></article>';
  }).join("")+'</div>';
 }
 function renderHome(){
@@ -114,7 +114,8 @@ async function copyText(r){
  toast("已复制英文文本战报");
 }
 async function copyImage(r){
- const canvas=Report.canvas(r,{light:state.light,pb:isPB(r),previous:previousRun(r),single:state.single});
+ const icons=await Report.loadIcons(r);
+ const canvas=Report.canvas(r,{light:state.light,pb:isPB(r),previous:previousRun(r),single:state.single,icons});
  const data=canvas.toDataURL("image/png");
  if(!data.startsWith("data:image/png;base64,"))throw new Error("图片生成失败");
  try{await invoke("copy_report_image",{png:data.slice("data:image/png;base64,".length)});}
@@ -160,7 +161,7 @@ function renderAnalytics(){
  $("chart-limit").value=String(state.chartLimit);$("chart-limit").onchange=e=>{state.chartLimit=Number(e.target.value);renderAnalytics()};
 }
 function renderSettings(){
- $("content").innerHTML='<div class="settings"><article class="settings-card"><h2>常规</h2><div class="setting-row"><div><b>界面主题</b><p>深色 / 浅色</p></div><button class="primary" data-action="theme">'+(state.light?"浅色":"深色")+'</button></div><div class="setting-row"><div><b>阶段布局</b><p>双列卡片或单列卡片</p></div><button data-action="layout">'+(state.single?"单列":"双列")+'</button></div></article><article class="settings-card"><h2>日志监听</h2><p class="muted">默认读取 Windows 用户目录下的 Warframe / EE.log，启动时回放历史记录，随后持续监听。</p><div class="path-control"><input id="log-path" placeholder="EE.log 的绝对路径" value="'+esc(state.status.path||"")+'"><button class="primary" data-action="save-path">保存</button><button data-action="reset-path">恢复默认</button></div><div class="setting-row"><span>连接状态</span><b id="setting-status"></b></div><div class="setting-row"><span>读取位置</span><span id="setting-offset" class="muted"></span></div><div id="setting-error" class="error"></div></article><article class="settings-card"><h2><img src="logo.svg" alt="" width="32" height="32" style="vertical-align:middle;border-radius:6px;margin-right:8px">关于 PT Analytics Next</h2><p>v0.1.6 · Tauri 2 / Rust · GPL-3.0-or-later</p><p class="muted">使用独立 Rust 日志解析核心及 Tauri 前端。所有任务数据仅保存在本地 SQLite 数据库。</p><p class="muted">非 Warframe 官方应用。</p></article></div>';
+ $("content").innerHTML='<div class="settings"><article class="settings-card"><h2>常规</h2><div class="setting-row"><div><b>界面主题</b><p>深色 / 浅色</p></div><button class="primary" data-action="theme">'+(state.light?"浅色":"深色")+'</button></div><div class="setting-row"><div><b>阶段布局</b><p>双列卡片或单列卡片</p></div><button data-action="layout">'+(state.single?"单列":"双列")+'</button></div></article><article class="settings-card"><h2>日志监听</h2><p class="muted">默认读取 Windows 用户目录下的 Warframe / EE.log，启动时回放历史记录，随后持续监听。</p><div class="path-control"><input id="log-path" placeholder="EE.log 的绝对路径" value="'+esc(state.status.path||"")+'"><button class="primary" data-action="save-path">保存</button><button data-action="reset-path">恢复默认</button></div><div class="setting-row"><span>连接状态</span><b id="setting-status"></b></div><div class="setting-row"><span>读取位置</span><span id="setting-offset" class="muted"></span></div><div id="setting-error" class="error"></div></article><article class="settings-card"><h2><img src="logo.svg" alt="" width="32" height="32" style="vertical-align:middle;border-radius:6px;margin-right:8px">关于 PT Analytics Next</h2><p>v0.1.7 · Tauri 2 / Rust · GPL-3.0-or-later</p><p class="muted">使用独立 Rust 日志解析核心及 Tauri 前端。所有任务数据仅保存在本地 SQLite 数据库。</p><p class="muted">非 Warframe 官方应用。</p></article></div>';
 }
 function openDialog(title,description,value,action){$("dialog-title").textContent=title;$("dialog-description").textContent=description;$("dialog-input").hidden=value===null;$("dialog-input").value=value??"";dialogAction=action;$("edit").showModal();if(value!==null){$("dialog-input").focus();$("dialog-input").select()}}
 $("dialog-cancel").onclick=()=>$("edit").close();

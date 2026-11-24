@@ -1,20 +1,13 @@
-name: Windows build & release
+name: Windows build (manual)
 on:
-  push:
-    branches: [master]
-    paths:
-      - 'src-tauri/**'
-      - 'ui/**'
-      - 'package.json'
-      - 'assets/**'
-      - 'scripts/generate_icons.py'
-      - '.github/workflows/release.yml'
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish a new Release after successful build
+        type: boolean
+        default: false
 permissions:
   contents: write
-concurrency:
-  group: windows-release-${{ github.sha }}
-  cancel-in-progress: false
 jobs:
   windows:
     runs-on: windows-latest
@@ -31,63 +24,34 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-      - name: Install CLI and generate app icons
-        run: |
-          python -m pip install Pillow==11.3.0
-          if ($LASTEXITCODE -ne 0) { throw 'Pillow installation failed' }
-          npm install
-          if ($LASTEXITCODE -ne 0) { throw 'npm installation failed' }
-          npm run icons
-          if ($LASTEXITCODE -ne 0) { throw 'Icon generation failed' }
-          npm run check
-      - name: Rust regression tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml --release
-      - name: Build Windows x64 app and NSIS installer
-        run: npm run build -- --bundles nsis
-      - name: Commit reproducible icon assets
-        if: github.ref == 'refs/heads/master'
+      - name: Build and regression tests
         shell: pwsh
+        run: ./scripts/build-windows.ps1
+      - name: Package corresponding source
+        shell: bash
         run: |
-          git add assets/logo.png assets/logo.ico assets/logo.svg ui/logo.svg
-          if ($LASTEXITCODE -ne 0) { throw 'Unable to stage icon assets' }
-          git diff --cached --quiet
-          if ($LASTEXITCODE -eq 1) {
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -m "chore: materialize approved project icon formats"
-            if ($LASTEXITCODE -ne 0) { throw 'Icon asset commit failed' }
-            git push origin HEAD:master
-            if ($LASTEXITCODE -ne 0) { throw 'Repository advanced; icon assets not pushed' }
-          } elseif ($LASTEXITCODE -ne 0) { throw 'Unable to inspect staged assets' }
-      - name: Collect binaries and corresponding source
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force dist | Out-Null
-          $bin = Get-ChildItem src-tauri/target/release -Filter '*.exe' -File | Where-Object { $_.Name -in @('pt-analytics-next.exe','PT Analytics Next.exe') } | Select-Object -First 1
-          if (-not $bin) { throw 'Application executable not found' }
-          Copy-Item $bin.FullName dist/PT-Analytics-Next_0.1.6_x64_portable.exe
-          $installer = Get-ChildItem src-tauri/target/release/bundle/nsis -Filter '*.exe' -File | Select-Object -First 1
-          if (-not $installer) { throw 'NSIS installer not found' }
-          Copy-Item $installer.FullName dist/PT-Analytics-Next_0.1.6_x64_setup.exe
-          git archive --format=zip --output=dist/PT-Analytics-Next_0.1.6_source.zip HEAD
-          if ($LASTEXITCODE -ne 0) { throw 'Source archive failed' }
-          7z a dist/PT-Analytics-Next_0.1.6_source.zip src-tauri/Cargo.lock package-lock.json src-tauri/icons
-          if ($LASTEXITCODE -ne 0) { throw 'Source archive completion failed' }
-          Get-ChildItem dist -File | Get-FileHash -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $([System.IO.Path]::GetFileName($_.Path))" } | Set-Content dist/SHA256SUMS.txt
+          set -euo pipefail
+          version="$(python -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')"
+          git ls-tree -r -z --name-only HEAD > .tracked-manifest
+          python scripts/package_source.py . .tracked-manifest "dist/PT-Analytics-Next_$version"_source.zip
+          (cd dist && sha256sum *.exe *.zip > SHA256SUMS.txt && sha256sum -c SHA256SUMS.txt)
+          echo "VERSION=$version" >> "$GITHUB_ENV"
       - uses: actions/upload-artifact@v4
         with:
           name: PT-Analytics-Next-windows-x64
           path: dist/*
           if-no-files-found: error
-      - name: Publish v0.1.6
-        if: github.ref == 'refs/heads/master'
+      - name: Publish release
+        if: inputs.publish && github.ref == 'refs/heads/master'
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        shell: pwsh
         run: |
-          gh release view v0.1.6 --repo $env:GITHUB_REPOSITORY 2>$null
-          if ($LASTEXITCODE -eq 0) { Write-Host 'v0.1.6 already exists; not replacing release'; exit 0 }
-          $releaseCommit = git rev-parse HEAD
-          if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve release commit' }
-          gh release create v0.1.6 dist/PT-Analytics-Next_0.1.6_x64_portable.exe dist/PT-Analytics-Next_0.1.6_x64_setup.exe dist/PT-Analytics-Next_0.1.6_source.zip dist/SHA256SUMS.txt --target $releaseCommit --title 'PT Analytics Next v0.1.6' --notes-file RELEASE_NOTES.md --repo $env:GITHUB_REPOSITORY
-          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
+          set -euo pipefail
+          tag="v$VERSION"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release already exists; refusing overwrite" >&2; exit 1
+          fi
+          test -z "$(git ls-remote --tags origin "refs/tags/$tag")"
+          gh release create "$tag" dist/*.exe dist/*.zip dist/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "PT Analytics Next $tag" --notes-file RELEASE_NOTES.md --draft
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false

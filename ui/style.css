@@ -46,3 +46,6 @@ dialog{width: min(430px,90vw);background:var(--panel);color:var(--text);border:1
 .phase-detail-row .split-row{min-height:23px;padding:3px 0 3px 14px;gap:5px 15px;align-items:center}
 .damage-glyph{font-family:"Segoe UI Symbol","Microsoft YaHei UI",sans-serif!important;font-size:14px!important;min-width:12px;text-align:center}
 @media(max-width:1150px){.report-metrics .metric{padding:13px 12px;min-height:124px}.report-metrics .metric-icon{width:32px;height:32px}.report-metrics .metric-value{margin-left:0}.phase-detail-row{grid-template-columns:115px minmax(0,1fr)}.phase-detail-row .split-row{gap:4px 9px;padding-left:9px}.phase-detail-summary{padding-right:8px}.phase{padding:14px}}
+
+/* Original Warframe damage PNG silhouettes, matching light and dark themes. */
+.damage-icon{display:inline-block;width:15px;height:15px;flex:0 0 15px;background:var(--text);mask:var(--damage-image) center/contain no-repeat;-webkit-mask:var(--damage-image) center/contain no-repeat;}

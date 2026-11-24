@@ -1,0 +1,15 @@
+{
+  "Impact": "https://browse.wf/Lotus/Interface/Icons/Damage/Impact_d.png",
+  "Puncture": "https://browse.wf/Lotus/Interface/Icons/Damage/Puncture_d.png",
+  "Slash": "https://browse.wf/Lotus/Interface/Icons/Damage/Slash_d.png",
+  "Heat": "https://browse.wf/Lotus/Interface/Icons/Damage/Heat_d.png",
+  "Cold": "https://browse.wf/Lotus/Interface/Icons/Damage/Cold_d.png",
+  "Electric": "https://browse.wf/Lotus/Interface/Icons/Damage/Electricity_d.png",
+  "Toxin": "https://browse.wf/Lotus/Interface/Icons/Damage/Poison_d.png",
+  "Blast": "https://browse.wf/Lotus/Interface/Icons/Damage/Blast_d.png",
+  "Radiation": "https://browse.wf/Lotus/Interface/Icons/Damage/Radiation_d.png",
+  "Gas": "https://browse.wf/Lotus/Interface/Icons/Damage/Gas_d.png",
+  "Magnetic": "https://browse.wf/Lotus/Interface/Icons/Damage/Magnetic_d.png",
+  "Viral": "https://browse.wf/Lotus/Interface/Icons/Damage/Viral_d.png",
+  "Corrosive": "https://browse.wf/Lotus/Interface/Icons/Damage/Corrosive_d.png"
+}

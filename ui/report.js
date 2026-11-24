@@ -16,7 +16,19 @@ const Report = (() => {
  const types={1:["shield","leg","body","pylon"],2:["leg","body"],3:["shield","leg","body","pylon"],4:["shield","leg","body"]};
  const legNames={FrontLeft:"FL",FrontRight:"FR",BackLeft:"BL",BackRight:"BR"};
  const damageNames={Impact:"Impact",Puncture:"Puncture",Slash:"Slash",Heat:"Heat",Cold:"Cold",Electric:"Electric",Toxin:"Toxin",Blast:"Blast",Radiation:"Radiation",Gas:"Gas",Magnetic:"Magnetic",Viral:"Viral",Corrosive:"Corrosive",NoShield:"None"};
- const glyphs={Impact:"◆",Puncture:"↗",Slash:"◜",Heat:"♨",Cold:"❄",Electric:"ϟ",Toxin:"☠",Blast:"✷",Radiation:"☢",Gas:"♣",Magnetic:"⊂",Viral:"✚",Corrosive:"≈",NoShield:"–"};
+ const damageFiles=["Impact","Puncture","Slash","Heat","Cold","Electric","Toxin","Blast","Radiation","Gas","Magnetic","Viral","Corrosive"];
+ const damageIcon=name=>damageFiles.includes(name)?"damage-icons/"+name+".png":null;
+ const iconCache=new Map();
+ async function loadIcons(r){
+  const names=[...new Set(phases(r).flatMap(p=>p.rows.flatMap(row=>row.splits)).filter(s=>s.icon).map(s=>s.name))];
+  await Promise.all(names.map(async name=>{
+   if(!iconCache.has(name)){
+    const image=new Image();image.src=damageIcon(name);
+    await image.decode();iconCache.set(name,image);
+   }
+  }));
+  return iconCache;
+ }
  const fmt=n=>Number.isFinite(n)?n.toFixed(3):"—";
  const sec=n=>Number.isFinite(n)?fmt(n)+"s":"—";
  const elapsed=r=>r.elapsed_seconds??(!r.is_aborted_run&&!r.is_bugged_run&&(r.lifecycle==="completed"||!r.lifecycle&&r.phases?.length===4)?r.total_times.total_time:null);
@@ -25,7 +37,7 @@ const Report = (() => {
  function rows(p){
   return (types[p.phase_number]||[]).map(type=>{
    const d=definitions[type],raw=p[d.key],value=Number.isFinite(raw)&&!(p.complete===false&&raw===0)?raw:null;
-   const splits=(d.list?p[d.list]||[]:[]).map(x=>({name:type==="shield"?damageNames[x[d.name]]||x[d.name]:legNames[x[d.name]]||x[d.name],symbol:type==="shield"?glyphs[x[d.name]]||"?":legNames[x[d.name]]||"?",time:x[d.value],type}));
+   const splits=(d.list?p[d.list]||[]:[]).map(x=>({name:type==="shield"?damageNames[x[d.name]]||x[d.name]:legNames[x[d.name]]||x[d.name],symbol:type==="shield"?damageNames[x[d.name]]||String(x[d.name]??"Unknown"):legNames[x[d.name]]||"?",icon:type==="shield"?damageIcon(x[d.name]):null,time:x[d.value],type}));
    return {type,cn:d.cn,en:d.en,value,splits};
   });
  }
@@ -75,7 +87,7 @@ const Report = (() => {
   lines.push(bar,"");return lines.join("\n");
  }
  // Dedicated export layout; no DOM rasterization, remote resources or opaque page background.
- function canvas(r,{light=true,pb=false,previous=null,single=false}={}){
+ function canvas(r,{light=true,pb=false,previous=null,single=false,icons=new Map()}={}){
   const W=1338,gap=12,mh=145,pw=single?W:(W-gap)/2;
   const model=phases(r),values=metricValues(r,previous),muted=light?"#929292":"#aaa",fg=light?"#121212":"#eee",panel=light?"#fff":"#1e1e1e";
   const c=document.createElement("canvas"),ctx=c.getContext("2d");
@@ -85,7 +97,7 @@ const Report = (() => {
   function layout(row){
    const start=200,limit=pw-16,wrapped=[[]];let x=start;
    for(const split of row.splits){
-    const w=width(split.symbol,12,600)+8+width(fmt(split.time),12,400,true)+18;
+    const w=(split.icon&&icons.has(split.name)?15:width(split.symbol,12,600))+8+width(fmt(split.time),12,400,true)+18;
     if(x+w>limit&&wrapped[wrapped.length-1].length){wrapped.push([]);x=start;}
     wrapped[wrapped.length-1].push({split,x});x+=w;
    }
@@ -122,8 +134,19 @@ const Report = (() => {
     rows.forEach(({row,wrapped,height})=>{
      txt(row.cn,x+20,yy+11,fg,15);txt(fmt(row.value),x+169,yy+11,muted,15,400,"right",true);
      wrapped.forEach((line,j)=>line.forEach(({split,x:sx})=>{
-      const dy=yy+11+j*22;txt(split.symbol,x+sx,dy,fg,12,600);
-      txt(fmt(split.time),x+sx+width(split.symbol,12,600)+8,dy,muted,12,400,"left",true);
+      const dy=yy+11+j*22;
+      const image=split.icon&&icons.get(split.name);
+      let symbolWidth=width(split.symbol,12,600);
+      if(image){
+       // Tint the original alpha mask for the selected theme, preserving its silhouette.
+       const mask=document.createElement("canvas");mask.width=32;mask.height=32;
+       const m=mask.getContext("2d");const ratio=Math.min(32/image.naturalWidth,32/image.naturalHeight);
+       const iw=image.naturalWidth*ratio,ih=image.naturalHeight*ratio;
+       m.drawImage(image,(32-iw)/2,(32-ih)/2,iw,ih);
+       m.globalCompositeOperation="source-in";m.fillStyle=fg;m.fillRect(0,0,32,32);
+       ctx.drawImage(mask,x+sx,dy-7.5,15,15);symbolWidth=15;
+      } else {txt(split.symbol,x+sx,dy,fg,12,600);}
+      txt(fmt(split.time),x+sx+symbolWidth+8,dy,muted,12,400,"left",true);
      }));
      yy+=height;
     });
@@ -132,6 +155,6 @@ const Report = (() => {
   });
   return c;
  }
- return {metrics,names,rows,phases,text,canvas,metricValues,deltaText,eligible,elapsed,life,duration,fmt,sec};
+ return {metrics,names,rows,phases,text,canvas,damageIcon,loadIcons,metricValues,deltaText,eligible,elapsed,life,duration,fmt,sec};
 })();
 if(typeof module!=="undefined"&&module.exports)module.exports=Report;
