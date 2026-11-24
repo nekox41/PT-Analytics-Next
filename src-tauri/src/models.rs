@@ -36,6 +36,14 @@ pub enum EndReason { BossDefeated, MissionAbort, ReturnToTown, LogReset, PathCha
 fn legacy_phase_complete() -> bool { true }
 
 impl Run {
+    // Must match Report.eligible in the frontend: only complete, trustworthy runs
+    // consume the public ordinal. The SQLite ID remains an opaque internal key.
+    pub fn is_ranked(&self) -> bool {
+        let elapsed=self.elapsed_seconds.unwrap_or(self.total_times.total_time);
+        self.lifecycle==Some(Lifecycle::Completed) && !self.is_aborted_run && !self.is_bugged_run
+            && elapsed.is_finite() && elapsed>0.0
+            && self.phases.len()==4 && self.phases.iter().all(|p|p.complete)
+    }
     pub fn normalize_legacy(&mut self) {
         if self.lifecycle.is_some() { return; }
         self.lifecycle=Some(if self.is_aborted_run { Lifecycle::Aborted } else if self.is_bugged_run || self.phases.len()!=4 { Lifecycle::Invalid } else { Lifecycle::Completed });

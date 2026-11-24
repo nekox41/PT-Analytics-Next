@@ -1,6 +1,6 @@
 [package]
 name = "pt-analytics-next"
-version = "0.1.8"
+version = "0.1.9"
 edition = "2021"
 license = "MIT"
 description = "Resilient local Profit-Taker run analytics"

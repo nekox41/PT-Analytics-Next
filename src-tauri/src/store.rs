@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
-use crate::{engine::Completed, models::Run};
+use crate::{engine::Completed, models::{Run,Lifecycle}};
 use rusqlite::{Connection, params};
 use serde::Serialize;
 use std::path::Path;
 
 #[derive(Serialize)]
-pub struct Record { #[serde(flatten)] pub run: Run, pub favorite: bool }
+pub struct Record { #[serde(flatten)] pub run: Run, pub favorite: bool, pub display_number: Option<usize> }
 pub struct Store { conn: Connection }
 impl Store {
     pub fn open(path: &Path) -> Result<Self, String> {
@@ -30,13 +30,32 @@ impl Store {
     pub fn list(&self) -> Result<Vec<Record>, String> {
         let mut stmt = self.conn.prepare("SELECT id,payload,name,favorite FROM runs WHERE deleted=0 ORDER BY stamp DESC,id DESC").map_err(err)?;
         let rows = stmt.query_map([], |r| Ok((r.get::<_,i32>(0)?,r.get::<_,String>(1)?,r.get::<_,Option<String>>(2)?,r.get::<_,bool>(3)?))).map_err(err)?;
-        let mut out = Vec::new();
+        let mut entries = Vec::new();
         for row in rows {
             let (id, payload, name, favorite) = row.map_err(err)?;
             let mut run: Run = serde_json::from_str(&payload).map_err(err)?;
-            run.normalize_legacy(); run.run_id=id; run.run_name=name.unwrap_or_else(|| format!("Run #{}", id));
-            out.push(Record { run, favorite });
+            run.normalize_legacy();
+            run.run_id=id;
+            entries.push((run,name,favorite));
         }
+        // Assign public numbers in chronological order, independently of filter/sort.
+        // Deleted rows were excluded in SQL, and replayed records keep their internal IDs.
+        let mut ordinal=0usize;
+        let mut out=Vec::with_capacity(entries.len());
+        for (mut run,name,favorite) in entries.into_iter().rev() {
+            let display_number=if run.is_ranked() { ordinal+=1; Some(ordinal) } else { None };
+            run.run_name=name.unwrap_or_else(|| match display_number {
+                Some(number)=>format!("Run #{}",number),
+                None=>match run.lifecycle {
+                    Some(Lifecycle::Aborted)=>"中止任务",
+                    Some(Lifecycle::Interrupted)=>"中断任务",
+                    Some(Lifecycle::Pending|Lifecycle::Running)=>"未完成任务",
+                    _=>"异常任务",
+                }.into(),
+            });
+            out.push(Record{run,favorite,display_number});
+        }
+        out.reverse();
         Ok(out)
     }
     pub fn rename(&self, id: i32, name: &str) -> Result<(), String> {
@@ -96,6 +115,71 @@ fn err(e: impl std::fmt::Display) -> String { e.to_string() }
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Synthetic rows intentionally include gaps, aborted/invalid records, and tombstones.
+    fn ranked_fixture(key:&str,stamp:i64) -> Completed {
+        let mut run=Run::new();
+        run.time_stamp=stamp;
+        run.lifecycle=Some(Lifecycle::Completed);
+        run.elapsed_seconds=Some(80.0);
+        run.total_times.total_time=80.0;
+        run.phases=(1..=4).map(|phase_number| crate::models::Phase{phase_number,complete:true,..Default::default()}).collect();
+        Completed{key:key.into(),run}
+    }
+    #[test]
+    fn display_numbers_skip_failed_interrupted_deleted_and_duplicate_records() {
+        let s=Store::open(Path::new(":memory:")).unwrap();
+        let mut aborted=ranked_fixture("abort",10);
+        aborted.run.lifecycle=Some(Lifecycle::Aborted);aborted.run.is_aborted_run=true;
+        s.insert(&aborted).unwrap();
+        let first=ranked_fixture("first",20);
+        s.insert(&first).unwrap();s.insert(&first).unwrap();
+        let mut interrupted=ranked_fixture("interrupted",30);
+        interrupted.run.lifecycle=Some(Lifecycle::Interrupted);s.insert(&interrupted).unwrap();
+        let mut invalid=ranked_fixture("invalid",40);
+        invalid.run.lifecycle=Some(Lifecycle::Invalid);invalid.run.is_bugged_run=true;s.insert(&invalid).unwrap();
+        let deleted=ranked_fixture("deleted",50);s.insert(&deleted).unwrap();
+        let deleted_id=s.list().unwrap().iter().find(|r|r.run.time_stamp==50).unwrap().run.run_id;
+        s.delete(deleted_id).unwrap();s.insert(&deleted).unwrap();
+        let last=ranked_fixture("last",60);s.insert(&last).unwrap();
+        let rows=s.list().unwrap();
+        let ranked:Vec<_>=rows.iter().filter(|r|r.display_number.is_some()).collect();
+        assert_eq!(ranked.len(),2);
+        assert_eq!(ranked[0].display_number,Some(2));assert_eq!(ranked[0].run.run_name,"Run #2");
+        assert_eq!(ranked[1].display_number,Some(1));assert_eq!(ranked[1].run.run_name,"Run #1");
+        assert!(ranked[0].run.run_id>2);
+        assert_eq!(rows.iter().filter(|r|r.display_number.is_none()).count(),3);
+        assert!(!rows.iter().any(|r|r.run.time_stamp==50));
+        let first_id=ranked[1].run.run_id;let last_id=ranked[0].run.run_id;
+        s.favorite(last_id).unwrap();
+        s.delete(first_id).unwrap();
+        let rows=s.list().unwrap();
+        let r=rows.iter().find(|r|r.run.run_id==last_id).unwrap();
+        assert_eq!(r.display_number,Some(1));assert_eq!(r.run.run_name,"Run #1");assert!(r.favorite);
+        s.insert(&first).unwrap();
+        assert_eq!(s.list().unwrap().iter().filter(|r|r.display_number.is_some()).count(),1);
+    }
+    #[test]
+    fn numbering_is_chronological_and_custom_names_are_preserved() {
+        let s=Store::open(Path::new(":memory:")).unwrap();
+        let newer=ranked_fixture("newer",200);
+        s.insert(&newer).unwrap();
+        let id=s.list().unwrap()[0].run.run_id;
+        s.rename(id,"我的 PB").unwrap();s.favorite(id).unwrap();
+        s.insert(&ranked_fixture("older",100)).unwrap();
+        let mut invalid=ranked_fixture("incomplete",150);
+        invalid.run.phases[3].complete=false;s.insert(&invalid).unwrap();
+        let mut zero=ranked_fixture("zero",160);
+        zero.run.elapsed_seconds=Some(0.0);s.insert(&zero).unwrap();
+        let mut legacy=ranked_fixture("legacy",50);
+        legacy.run.lifecycle=None;legacy.run.elapsed_seconds=None;s.insert(&legacy).unwrap();
+        let rows=s.list().unwrap();
+        let r=rows.iter().find(|r|r.run.run_id==id).unwrap();
+        assert_eq!(r.display_number,Some(3));assert_eq!(r.run.run_name,"我的 PB");assert!(r.favorite);
+        assert_eq!(rows.iter().find(|r|r.run.time_stamp==100).unwrap().display_number,Some(2));
+        assert_eq!(rows.iter().find(|r|r.run.time_stamp==50).unwrap().display_number,Some(1));
+        assert!(rows.iter().filter(|r|[150,160].contains(&r.run.time_stamp)).all(|r|r.display_number.is_none()));
+    }
     #[test]
     fn star_prompt_only_once_on_tenth_launch_and_persists() {
         let d=tempfile::tempdir().unwrap(); let path=d.path().join("test.sqlite3");

@@ -34,7 +34,7 @@ const Report = (() => {
  const sec=n=>Number.isFinite(n)?fmt(n)+"s":"—";
  const elapsed=r=>r.elapsed_seconds??(!r.is_aborted_run&&!r.is_bugged_run&&(r.lifecycle==="completed"||!r.lifecycle&&r.phases?.length===4)?r.total_times.total_time:null);
  const life=r=>r.lifecycle||(r.is_aborted_run?"aborted":r.is_bugged_run||r.phases?.length!==4?"invalid":"completed");
- const eligible=r=>life(r)==="completed"&&!r.is_bugged_run&&Number.isFinite(elapsed(r))&&elapsed(r)>0&&r.phases?.length===4&&r.phases.every(p=>p.complete!==false);
+ const eligible=r=>life(r)==="completed"&&!r.is_aborted_run&&!r.is_bugged_run&&Number.isFinite(elapsed(r))&&elapsed(r)>0&&r.phases?.length===4&&r.phases.every(p=>p.complete!==false);
  function rows(p){
   return (types[p.phase_number]||[]).map(type=>{
    const d=definitions[type],raw=p[d.key],value=Number.isFinite(raw)&&!(p.complete===false&&raw===0)?raw:null;
@@ -68,7 +68,7 @@ const Report = (() => {
  function plain(s){return String(s??"").replace(/[\r\n\t]+/g," ").trim();}
  function text(r){
   const bar="-".repeat(72),total=elapsed(r),status=life(r),player=r.self_verified&&r.player_name?plain(r.player_name):"未知玩家";
-  const name=plain(r.run_name)||("Run #"+r.run_id);
+  const name=plain(r.run_name)||(Number.isInteger(r.display_number)&&r.display_number>0?"Run #"+r.display_number:"未编号任务");
   const headline=status==="completed"?"完成，用时 "+duration(total):({aborted:"主动中止",interrupted:"意外中断",invalid:"数据异常"}[status]||"状态未知")+(Number.isFinite(total)?"，用时 "+(status==="interrupted"?"至少 ":"")+duration(total):"（耗时未知）");
   const lines=["",bar,"利润收割者 "+name+" · "+player+" · "+headline];
   const peers=[...new Set([!r.self_verified?r.player_name:"",...(r.squad_members||[]).map(p=>p.member_name)].filter(Boolean).map(plain))];

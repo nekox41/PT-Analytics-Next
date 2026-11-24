@@ -95,3 +95,15 @@ test("export draws original image masks for shield splits rather than glyph text
   assert.ok(!texts.includes("Puncture"));
  }finally{delete global.document;}
 });
+
+test("reports use display number, never the internal database ID",()=>{
+ const r=run();r.run_id=700;r.display_number=2;r.run_name="";
+ assert.match(R.text(r),/利润收割者 Run #2/);assert.doesNotMatch(R.text(r),/Run #700/);
+ r.display_number=null;r.lifecycle="aborted";
+ assert.match(R.text(r),/未编号任务/);assert.doesNotMatch(R.text(r),/Run #700/);
+});
+test("only valid completed runs qualify for numbering and statistics",()=>{
+ const r=run();assert.ok(R.eligible(r));r.is_aborted_run=true;assert.equal(R.eligible(r),false);
+ r.is_aborted_run=false;r.phases[3].complete=false;assert.equal(R.eligible(r),false);
+ r.phases[3].complete=true;r.elapsed_seconds=0;assert.equal(R.eligible(r),false);
+});
