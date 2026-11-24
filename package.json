@@ -1,0 +1,16 @@
+{
+  "name": "pt-analytics-next",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "tauri": "tauri",
+    "icons": "tauri icon app-icon.svg",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "check": "node --check ui/app.js"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}

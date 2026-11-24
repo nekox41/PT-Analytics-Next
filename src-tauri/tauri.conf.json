@@ -1,0 +1,34 @@
+{
+  "productName": "PT Analytics Next",
+  "version": "0.1.0",
+  "identifier": "io.github.nekox41.ptanalyticsnext",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "PT Analytics Next",
+        "width": 1440,
+        "height": 820,
+        "minWidth": 860,
+        "minHeight": 580
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src ipc: http://ipc.localhost; script-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/icon.ico",
+      "icons/128x128.png"
+    ],
+    "licenseFile": "../LICENSE"
+  }
+}

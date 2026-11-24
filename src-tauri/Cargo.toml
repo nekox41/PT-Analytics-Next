@@ -1,0 +1,24 @@
+[package]
+name = "pt-analytics-next"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "Resilient local Profit-Taker run analytics"
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = "0.4"
+regex = "1"
+same-file = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+[dev-dependencies]
+tempfile = "3"
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+[profile.release]
+lto = "thin"
+strip = true
+panic = "unwind"
