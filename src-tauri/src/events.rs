@@ -23,7 +23,7 @@ pub const PYLONS: &str = "Pylon launch complete";
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event {
     Session(i64), Job, Elevator, Phase(u8), Shield(Damage), ShieldDone,
-    Leg(Leg), Vulnerable, BodyKilled, Pylons, Abort, Player(String), Member(String),
+    Leg(Leg), Vulnerable, BodyKilled, Pylons, Abort, ReturnToTown, Player(String), Member(String),
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct Observation { pub time: f64, pub event: Event }
@@ -66,7 +66,8 @@ pub fn decode(line: &str) -> Result<Option<Observation>, &'static str> {
     let event = if line.contains(HEADER) {
         let time = seconds(line)?;
         return Ok(Some(Observation { time, event: Event::Session(epoch(line, time).ok_or("invalid log session clock")?) }));
-    } else if line.contains(ABORT) || line.contains(TOWN) { Event::Abort }
+    } else if line.contains(ABORT) || line.contains("SetReturnToLobbyLevelArgs: ") { Event::Abort }
+    else if line.contains(TOWN) { Event::ReturnToTown }
     else if line.contains(JOB) { Event::Job }
     else if line.contains(EXIT) { Event::Elevator }
     else if let Some(i) = PHASE_MARKERS.iter().position(|p| line.contains(*p)) { Event::Phase((i+1) as u8) }

@@ -85,6 +85,18 @@ mod tests {
         assert!(matches!(f.push(b"\nok\n").as_slice(), [Line::Complete(_, x)] if x == b"ok"));
     }
     #[test]
+    fn missing_path_then_reconnect_keeps_offset_and_partial_line() {
+        let d=tempfile::tempdir().unwrap();let path=d.path().join("EE.log");let backup=d.path().join("held.log");
+        std::fs::write(&path,b"first\npar").unwrap();
+        let mut tail=Tail::new();let mut framer=Framer::new();
+        let batch=tail.poll(&path).unwrap();assert!(batch.reset);
+        assert!(matches!(framer.push(&batch.bytes).as_slice(),[Line::Complete(0,x)] if x==b"first"));
+        std::fs::rename(&path,&backup).unwrap();assert!(tail.poll(&path).is_err());
+        std::fs::OpenOptions::new().append(true).open(&backup).unwrap().write_all(b"tial\n").unwrap();
+        std::fs::rename(&backup,&path).unwrap();let batch=tail.poll(&path).unwrap();assert!(!batch.reset);
+        assert!(matches!(framer.push(&batch.bytes).as_slice(),[Line::Complete(6,x)] if x==b"partial"));
+    }
+    #[test]
     fn append_truncate_regrow_and_replacement() {
         let d = tempfile::tempdir().unwrap(); let p = d.path().join("EE.log");
         let mut t = Tail::new();

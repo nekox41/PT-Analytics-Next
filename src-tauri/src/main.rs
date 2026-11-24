@@ -5,12 +5,13 @@ mod engine; mod tail; mod store;
 use engine::{Completed, Engine};
 use tail::{Tail, Framer, Line};
 use store::{Store, Record};
+use models::{EndReason,Lifecycle};
 use serde::Serialize;
 use std::{collections::VecDeque, path::PathBuf, sync::{Arc, Mutex}, time::Duration, thread};
 use tauri::{Manager, State};
 
 #[derive(Clone, Serialize, Default)]
-struct Status { mode: String, path: String, offset: u64, size: u64, warnings: u64, active: bool, error: String, revision: u64 }
+struct Status { mode: String, path: String, offset: u64, size: u64, warnings: u64, active: bool, lifecycle: Option<Lifecycle>, error: String, revision: u64 }
 struct Shared { path: Mutex<PathBuf>, status: Mutex<Status>, store: Mutex<Store> }
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> { m.lock().unwrap_or_else(|e| e.into_inner()) }
 fn default_path() -> PathBuf {
@@ -22,9 +23,13 @@ fn default_path() -> PathBuf {
 fn worker(shared: Arc<Shared>) {
     let mut tail = Tail::new(); let mut framer = Framer::new(); let mut engine = Engine::new();
     let mut path = PathBuf::new(); let mut pending: VecDeque<Completed> = VecDeque::new();
+    let mut initial_replay=true; let mut checkpoint_dirty=true; let mut caught_up=false;
     loop {
         let desired = lock(&shared.path).clone();
-        if desired != path { path=desired; tail=Tail::new(); framer=Framer::new(); engine.reset(); }
+        if desired != path {
+            if let Some(item)=engine.reset(EndReason::PathChanged){pending.push_back(item);}
+            path=desired;tail=Tail::new();framer=Framer::new();caught_up=false;checkpoint_dirty=true;
+        }
         let mut status = Status { path: path.to_string_lossy().into_owned(), revision: lock(&shared.status).revision, ..Status::default() };
         // Keep failed writes queued rather than dropping completed runs.
         while let Some(item) = pending.front() {
@@ -34,13 +39,26 @@ fn worker(shared: Arc<Shared>) {
             }
         }
         if !pending.is_empty() {
-            status.offset=tail.offset; status.warnings=engine.warnings; status.active=engine.active();
+            status.offset=tail.offset; status.warnings=engine.warnings; status.active=engine.active(); status.lifecycle=engine.lifecycle();
             *lock(&shared.status)=status; thread::sleep(Duration::from_secs(1)); continue;
+        }
+        if caught_up && checkpoint_dirty {
+            let snapshot=engine.snapshot();
+            let result=if initial_replay { lock(&shared.store).reconcile_checkpoint(snapshot.as_ref()) }
+                else { lock(&shared.store).save_checkpoint(snapshot.as_ref()) };
+            match result {
+                Ok(())=>{if initial_replay { status.revision+=1; } initial_replay=false;checkpoint_dirty=false;}
+                Err(e)=>{status.mode="storage_error".into();status.error=e;status.offset=tail.offset;status.active=engine.active();status.lifecycle=engine.lifecycle();*lock(&shared.status)=status;thread::sleep(Duration::from_secs(1));continue;}
+            }
         }
         let mut idle = true;
         match tail.poll(&path) {
             Ok(batch) => {
-                if batch.reset { framer=Framer::new(); engine.reset(); }
+                if batch.reset {
+                    framer=Framer::new();
+                    if let Some(item)=engine.reset(EndReason::LogReset){pending.push_back(item);}
+                    checkpoint_dirty=true;
+                }
                 for line in framer.push(&batch.bytes) {
                     match line {
                         Line::Complete(pos, bytes) => if let Some(item)=engine.line(pos, &bytes) { pending.push_back(item); },
@@ -48,6 +66,8 @@ fn worker(shared: Arc<Shared>) {
                     }
                 }
                 idle = batch.bytes.is_empty();
+                caught_up=tail.offset>=batch.size;
+                if !idle || batch.reset { checkpoint_dirty=true; }
                 status.size=batch.size;
                 status.mode=if tail.offset < batch.size { "replay" } else { "live" }.into();
             }
@@ -56,9 +76,9 @@ fn worker(shared: Arc<Shared>) {
                 status.error=e.to_string();
             }
         }
-        status.offset=tail.offset; status.warnings=engine.warnings; status.active=engine.active();
+        status.offset=tail.offset; status.warnings=engine.warnings; status.active=engine.active(); status.lifecycle=engine.lifecycle();
         *lock(&shared.status)=status;
-        if idle && pending.is_empty() { thread::sleep(Duration::from_millis(250)); }
+        if idle && pending.is_empty() && !(caught_up && checkpoint_dirty) { thread::sleep(Duration::from_millis(250)); }
     }
 }
 #[tauri::command]
@@ -90,7 +110,13 @@ fn main() {
         let shared=Arc::new(Shared { path: Mutex::new(path.clone()), store: Mutex::new(store),
             status: Mutex::new(Status { path:path.to_string_lossy().into_owned(), mode:"waiting".into(), ..Status::default() }) });
         app.manage(shared.clone());
-        thread::Builder::new().name("ee-log-reader".into()).spawn(move || worker(shared))?;
+        thread::Builder::new().name("ee-log-reader".into()).spawn(move || loop {
+            // A last-resort supervisor; expected I/O and parsing errors use Result.
+            if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| worker(shared.clone()))).is_err() {
+                let mut status=lock(&shared.status);status.mode="retry".into();status.error="日志工作线程异常，正在重新回放".into();drop(status);
+                thread::sleep(Duration::from_secs(1));
+            }
+        })?;
         Ok(())
     }).invoke_handler(tauri::generate_handler![get_status,get_runs,rename_run,favorite_run,delete_run,set_log_path])
       .run(tauri::generate_context!()).expect("failed to start PT Analytics Next");
