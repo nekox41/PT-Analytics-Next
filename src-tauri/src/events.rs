@@ -5,6 +5,7 @@ use chrono::{Local, NaiveDateTime, TimeZone};
 
 pub const HEADER: &str = "Sys [Diag]: Current time:";
 pub const JOB: &str = "jobId=/Lotus/Types/Gameplay/Venus/Jobs/Heists/HeistProfitTakerBountyFour";
+const JOB_PATH: &str = "/Lotus/Types/Gameplay/Venus/Jobs/Heists/HeistProfitTakerBountyFour";
 pub const EXIT: &str = "EidolonMP.lua: EIDOLONMP: Avatar left the zone";
 pub const ABORT: &str = "GameRulesImpl - changing state from SS_STARTED to SS_ENDING";
 pub const TOWN: &str = "EidolonMP.lua: EIDOLONMP: TryTownTransition";
@@ -66,9 +67,10 @@ pub fn decode(line: &str) -> Result<Option<Observation>, &'static str> {
     let event = if line.contains(HEADER) {
         let time = seconds(line)?;
         return Ok(Some(Observation { time, event: Event::Session(epoch(line, time).ok_or("invalid log session clock")?) }));
-    } else if line.contains(ABORT) || line.contains("SetReturnToLobbyLevelArgs: ") { Event::Abort }
+    } else if line.contains(ABORT) || line.contains("TopMenu.lua: Abort: host/no session") || line.contains("TopMenu.lua: Abort: client") { Event::Abort }
     else if line.contains(TOWN) { Event::ReturnToTown }
-    else if line.contains(JOB) { Event::Job }
+    else if line.trim_start().starts_with(JOB) { return Ok(None); } // multiline configuration, not a timed event
+    else if line.contains(JOB) || (line.contains(JOB_PATH) && (line.contains("ThemedSquadOverlay.lua: Active jobId set to ") || line.contains("EidolonMissions.lua - ActiveJob is "))) { Event::Job }
     else if line.contains(EXIT) { Event::Elevator }
     else if let Some(i) = PHASE_MARKERS.iter().position(|p| line.contains(*p)) { Event::Phase((i+1) as u8) }
     else if line.contains(SHIELD) {
@@ -96,6 +98,9 @@ mod tests {
     #[test]
     fn invalid_input_is_a_value_not_a_panic() {
         assert!(decode("ordinary unstructured text").unwrap().is_none());
+        assert!(decode(&format!("    {JOB}_suffix")).unwrap().is_none());
+        assert!(decode("152.875 Game [Info]: SetReturnToLobbyLevelArgs: /Lotus/Levels/Proc/TheNewWar/PartTwo/PostWarFortuna/DgA.lp").unwrap().is_none());
+        assert!(matches!(decode(&format!("142.168 Script [Info]: ThemedSquadOverlay.lua: Active jobId set to {JOB_PATH}_suffix")).unwrap().unwrap().event,Event::Job));
         assert!(decode("abc SwitchShieldVulnerability DT_FIRE").is_err());
         assert!(decode("1.0 SwitchShieldVulnerability DT_FUTURE").is_err());
         assert!(decode("1.0 Leg freshly destroyed at part: LEG_LEFT").unwrap().is_some());

@@ -1,0 +1,70 @@
+0.384 Sys [Diag]: Current time: Tue Nov 24 12:14:52 2026 [UTC: Tue Nov 24 04:14:52 2026]
+80.779 Script [Info]: ThemedSquadOverlay.lua: Active jobId set to /Lotus/Types/Gameplay/Venus/Jobs/Heists/HeistProfitTakerBountyFour_-6_SolarisUnitedHub1_test_EudicoHeists
+    jobId=/Lotus/Types/Gameplay/Venus/Jobs/Heists/HeistProfitTakerBountyFour_-6_SolarisUnitedHub1_test_EudicoHeists
+    jobTier=-6
+94.736 Game [Info]: SetReturnToLobbyLevelArgs: /Lotus/Levels/Proc/TheNewWar/PartTwo/PostWarFortuna/DgA.lp
+95.020 Script [Info]: EidolonMissions.lua: EidolonMissions.lua - ActiveJob is /Lotus/Types/Gameplay/Venus/Jobs/Heists/HeistProfitTakerBountyFour
+99.690 Game [Info]: SetReturnToLobbyLevelArgs: /Lotus/Levels/Proc/TheNewWar/PartTwo/PostWarFortuna
+99.691 Script [Info]: TopMenu.lua: Abort: host/no session
+99.698 Net [Info]: GameRulesImpl - changing state from SS_STARTED to SS_ENDING
+142.168 Script [Info]: ThemedSquadOverlay.lua: Active jobId set to /Lotus/Types/Gameplay/Venus/Jobs/Heists/HeistProfitTakerBountyFour_-6_SolarisUnitedHub1_test_EudicoHeists
+    jobId=/Lotus/Types/Gameplay/Venus/Jobs/Heists/HeistProfitTakerBountyFour_-6_SolarisUnitedHub1_test_EudicoHeists
+    jobTier=-6
+152.875 Game [Info]: SetReturnToLobbyLevelArgs: /Lotus/Levels/Proc/TheNewWar/PartTwo/PostWarFortuna/DgA.lp
+152.962 Script [Info]: EidolonMissions.lua: EidolonMissions.lua - ActiveJob is /Lotus/Types/Gameplay/Venus/Jobs/Heists/HeistProfitTakerBountyFour
+155.139 Script [Info]: EidolonMP.lua: EIDOLONMP: Avatar left the zone: TennoAvatar94
+164.973 AI [Info]: Camper->SwitchShieldVulnerability() - Switching shield damage vulnerability type to DT_PUNCTURE
+169.159 Script [Info]: CamperHeistOrbFight.lua: Orb Fight - Starting first attack Orb phase
+176.745 AI [Info]: Camper->SwitchShieldVulnerability() - Switching shield damage vulnerability type to DT_MAGNETIC
+176.794 AI [Info]: Camper->SwitchShieldVulnerability() - Switching shield damage vulnerability type to DT_RADIATION
+176.794 AI [Info]: Camper->SwitchShieldVulnerability() - Switching shield damage vulnerability type to DT_VIRAL
+176.795 Sys [Info]: ResourceLoader 0x0 (/Lotus/Sounds/Dialog/FortunaOrbHeist/Business/DBntyFourInterPrTk0920TheBusiness) Found 469 items to load
+178.508 AI [Info]: Camper->DestroyLeg() - Leg freshly destroyed at part: LEG_LEFT
+178.666 AI [Info]: Camper->DestroyLeg() - Leg freshly destroyed at part: ARM_LEFT
+179.042 AI [Info]: Camper->DestroyLeg() - Leg freshly destroyed at part: LEG_RIGHT
+179.201 AI [Info]: Camper->DestroyLeg() - Leg freshly destroyed at part: ARM_RIGHT
+181.446 AI [Info]: Camper->StartVulnerable() - The Camper can now be damaged!
+181.446 AI [Info]: Camper->StartVulnerable() - The Camper can now be damaged!
+181.797 Script [Info]: CamperHeistOrbFight.lua: Landscape - New State: 3 for encounter, was 2
+186.386 Script [Info]: ArachnoidCamperScript.lua: Pylon launch complete
+195.831 Script [Info]: CamperHeistOrbFight.lua: Orb Fight - Starting second attack Orb phase
+209.746 AI [Info]: Camper->DestroyLeg() - Leg freshly destroyed at part: LEG_RIGHT
+209.962 AI [Info]: Camper->DestroyLeg() - Leg freshly destroyed at part: ARM_RIGHT
+210.380 AI [Info]: Camper->DestroyLeg() - Leg freshly destroyed at part: LEG_LEFT
+210.481 AI [Info]: Camper->DestroyLeg() - Leg freshly destroyed at part: ARM_LEFT
+212.726 AI [Info]: Camper->StartVulnerable() - The Camper can now be damaged!
+212.726 AI [Info]: Camper->StartVulnerable() - The Camper can now be damaged!
+212.793 Script [Info]: CamperHeistOrbFight.lua: Landscape - New State: 5 for encounter, was 4
+212.793 Script [Info]: CamperHeistOrbFight.lua: Orb Fight - Starting third attack Orb phase
+212.801 AI [Info]: Camper->SwitchShieldVulnerability() - Switching shield damage vulnerability type to DT_EXPLOSION
+214.318 AI [Info]: Camper->SwitchShieldVulnerability() - Switching shield damage vulnerability type to DT_CORROSIVE
+216.151 AI [Info]: Camper->SwitchShieldVulnerability() - Switching shield damage vulnerability type to DT_GAS
+216.151 AI [Info]: Camper->SwitchShieldVulnerability() - Switching shield damage vulnerability type to DT_SLASH
+216.186 AI [Info]: Camper->SwitchShieldVulnerability() - Switching shield damage vulnerability type to DT_IMPACT
+216.846 AI [Info]: Camper->SwitchShieldVulnerability() - Switching shield damage vulnerability type to DT_ELECTRICITY
+216.871 Sys [Info]: ResourceLoader 0x0 (/Lotus/Sounds/Dialog/FortunaOrbHeist/Business/DBntyFourInterPrTk0890TheBusiness) Found 469 items to load
+218.312 AI [Info]: Camper->DestroyLeg() - Leg freshly destroyed at part: LEG_LEFT
+218.421 AI [Info]: Camper->DestroyLeg() - Leg freshly destroyed at part: ARM_LEFT
+218.807 AI [Info]: Camper->DestroyLeg() - Leg freshly destroyed at part: LEG_RIGHT
+218.966 AI [Info]: Camper->DestroyLeg() - Leg freshly destroyed at part: ARM_RIGHT
+221.212 AI [Info]: Camper->StartVulnerable() - The Camper can now be damaged!
+221.212 AI [Info]: Camper->StartVulnerable() - The Camper can now be damaged!
+221.229 Script [Info]: CamperHeistOrbFight.lua: Landscape - New State: 6 for encounter, was 5
+226.814 Script [Info]: ArachnoidCamperScript.lua: Pylon launch complete
+226.838 AI [Info]: Camper->SwitchShieldVulnerability() - Switching shield damage vulnerability type to DT_POISON
+236.914 Script [Info]: CamperHeistOrbFight.lua: Orb Fight - Starting final attack Orb phase
+241.889 AI [Info]: Camper->SwitchShieldVulnerability() - Switching shield damage vulnerability type to DT_FIRE
+243.179 AI [Info]: Camper->SwitchShieldVulnerability() - Switching shield damage vulnerability type to DT_FREEZE
+243.254 AI [Info]: Camper->SwitchShieldVulnerability() - Switching shield damage vulnerability type to DT_PUNCTURE
+243.254 AI [Info]: Camper->SwitchShieldVulnerability() - Switching shield damage vulnerability type to DT_MAGNETIC
+243.255 Sys [Info]: ResourceLoader 0x0 (/Lotus/Sounds/Dialog/FortunaOrbHeist/Business/DBntyFourSatelReal0930TheBusiness) Found 505 items to load
+244.445 AI [Info]: Camper->DestroyLeg() - Leg freshly destroyed at part: ARM_RIGHT
+244.922 AI [Info]: Camper->DestroyLeg() - Leg freshly destroyed at part: ARM_LEFT
+245.716 AI [Info]: Camper->DestroyLeg() - Leg freshly destroyed at part: LEG_RIGHT
+246.640 AI [Info]: Camper->DestroyLeg() - Leg freshly destroyed at part: LEG_LEFT
+248.886 AI [Info]: Camper->StartVulnerable() - The Camper can now be damaged!
+248.886 AI [Info]: Camper->StartVulnerable() - The Camper can now be damaged!
+249.013 Script [Info]: ArachnoidCamperScript.lua: CamperPreDeath
+249.013 AI [Info]: Camper->SwitchShieldVulnerability() - Switching shield damage vulnerability type to DT_RADIATION
+249.021 AI [Info]: Camper->StartVulnerable() - The Camper can now be damaged!
+276.507 Script [Info]: EidolonMP.lua: EIDOLONMP: TryTownTransition(nil)

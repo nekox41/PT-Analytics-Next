@@ -80,7 +80,8 @@ impl Fight {
             }
             return;
         }
-        if let Some((previous,from))=self.clocks.shield.replace((d,t)) {
+        let from=if self.clocks.shield.is_none(){self.clocks.phase_start}else{t};
+        if let Some((previous,from))=self.clocks.shield.replace((d,from)) {
             if let Some(p)=self.phase.as_mut() {
                 let delta=(t-from).max(0.0);
                 p.total_shield_time+=delta;
@@ -243,7 +244,7 @@ mod tests {
         let result=feed(&mut e,40.0,VULNERABLE).unwrap();
         assert_eq!(result.run.phases.len(),4);
         assert_eq!(result.run.total_times.total_time,30.0);
-        assert!((result.run.total_times.total_shield_time-1.8).abs()<1e-9);
+        assert!((result.run.total_times.total_shield_time-2.0).abs()<1e-9);
         assert_eq!(result.run.total_times.total_leg_time,1.0);
         assert_eq!(result.run.total_times.total_pylon_time,2.0);
         assert!(!result.run.is_aborted_run);assert!(!e.active());
@@ -281,6 +282,37 @@ mod tests {
         let snap=e.snapshot().unwrap();let r=e.reset(EndReason::LogReset).unwrap();
         assert_eq!(snap.key,r.key);assert_eq!(r.run.elapsed_seconds,Some(13.0));assert!(!r.run.phases[0].complete);
         assert_eq!(r.run.lifecycle,Some(Lifecycle::Interrupted));
+    }
+    #[test]
+    fn captured_two_run_regression() {
+        use crate::tail::{Framer,Line};
+        // Minimal anonymized event fixture from a real EE.log; no unrelated player/system data.
+        let log=include_bytes!("../tests/fixtures/2026-11-24-two-runs.log");
+        for chunk in [1,7,4096,log.len()] {
+            let mut e=Engine::new();let mut framer=Framer::new();let mut runs=Vec::new();
+            for bytes in log.chunks(chunk) {
+                for line in framer.push(bytes) {
+                    if let Line::Complete(offset,line)=line { if let Some(r)=e.line(offset,&line){runs.push(r);} }
+                }
+            }
+            assert_eq!(e.warnings,0,"valid multiline job blocks must not be errors");
+            assert_eq!(runs.len(),2);
+            assert_eq!(runs[0].run.lifecycle,Some(Lifecycle::Aborted));
+            assert_eq!(runs[0].run.elapsed_seconds,None);
+            let r=&runs[1].run;
+            assert_eq!(r.lifecycle,Some(Lifecycle::Completed));
+            assert_eq!(r.phases.len(),4);
+            let near=|a:f64,b:f64| assert!((a-b).abs()<0.00001,"actual {a} expected {b}");
+            near(r.elapsed_seconds.unwrap(),93.882);
+            near(r.total_times.total_flight_time,14.020);
+            near(r.total_times.total_shield_time,18.055);
+            near(r.total_times.total_leg_time,22.536);
+            near(r.total_times.total_body_time,0.570);
+            near(r.total_times.total_pylon_time,19.545);
+            for (p,expected) in r.phases.iter().zip([26.672,16.962,24.121,12.107]) { near(p.total_time,expected); }
+            assert_ne!(runs[0].key,runs[1].key);
+            assert!(!e.active());
+        }
     }
     #[test]
     fn startup_replay_and_live_append_produce_same_result() {
