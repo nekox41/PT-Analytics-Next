@@ -1,6 +1,6 @@
 {
   "productName": "PT Analytics Next",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "io.github.nekox41.ptanalyticsnext",
   "build": {
     "frontendDist": "../ui"

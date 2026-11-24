@@ -2,7 +2,7 @@
 
 **利润收割者竞速分析 · Rust × Tauri 2**
 
-PT Analytics Next 是独立的 Warframe 利润收割者日志分析工具。使用原项目 GPL Rust 核心的事件识别及四阶段计时逻辑，重构日志监听、异常恢复与本地存储，使用 Tauri 2 和独立的 HTML/CSS/JavaScript 前端。
+PT Analytics Next 是独立的 Warframe 利润收割者日志分析工具。采用自行编写的 Rust 类型化事件解析器与四阶段战斗状态机，独立实现日志监听、异常恢复、本地存储和 Tauri 2 前端。
 
 [下载 Windows 版本](https://github.com/nekox41/PT-Analytics-Next/releases) · [构建状态](https://github.com/nekox41/PT-Analytics-Next/actions)
 
@@ -41,8 +41,8 @@ npm run build -- --bundles nsis
 
 ```
 src-tauri/src/
-  models/       # GPL Rust 数据模型
-  parser/       # GPL 战斗事件与阶段解析
+  models.rs     # 任务数据模型
+  events.rs     # 类型化日志事件解码
   engine.rs     # 解析状态机与异常隔离
   tail.rs       # 文件跟踪与完整行缓冲
   store.rs      # SQLite 持久化与去重
@@ -51,10 +51,12 @@ ui/             # 独立前端
 .github/workflows/release.yml
 ```
 
-目前以 Windows x64 为首发平台。首版暂未实现原应用的在线排行榜/提交、账号同步、截图及全局快捷键。计时规则仍基于上游日志标记；真实游戏日志回归和跨平台打包需要进一步验证。数据库使用新的结构，不会覆盖原版应用数据。
+目前以 Windows x64 为首发平台。首版暂未实现原应用的在线排行榜/提交、账号同步、截图及全局快捷键。计时依据可观察的游戏日志事件；真实游戏日志回归和跨平台打包需要进一步验证。数据库使用新的结构，不会覆盖原版应用数据。
 
 ## 许可证
 
-GPL-3.0-or-later。保留 [Profit-Taker-Analytics Rust 核心](https://github.com/nekox41/Profit-Taker-Analytics/tree/79001b346137bf5d87111015f418c89f634ec6b4/rust_core) 的作者与授权声明。感谢 Basi (Enrique Rodrigues)、Kalaay、scamcat、RemasteredArch、Mebius、Reava、Neppkun 及其他贡献者。详见 [NOTICE.md](NOTICE.md) 与 [LICENSE](LICENSE)。
+GPL-3.0-or-later，详见 [LICENSE](LICENSE)。非 Warframe 官方产品。
 
-本应用独立实现前端，未分发原项目的专有应用组件。非 Warframe 官方产品。
+## 参考项目
+
+- [Profit-Taker-Analytics](https://github.com/nekox41/Profit-Taker-Analytics)：参考日志事件、竞速分析功能与公开界面布局。当前版本使用重新编写的核心，不包含其应用组件或旧版直接移植的 Rust 模块。

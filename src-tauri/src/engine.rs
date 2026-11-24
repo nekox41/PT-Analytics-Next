@@ -1,117 +1,236 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-use crate::{constants::*, line_utils::get_log_time, models::Run, parser::events::parse_run, parser_state::ParserState};
-use std::panic::{catch_unwind, AssertUnwindSafe};
+//! Deterministic, typed fight state machine. No log-derived panic paths.
+use crate::{events::{self, Event, Observation}, models::*};
 
 pub struct Completed { pub key: String, pub run: Run }
-pub struct Engine {
-    state: ParserState,
-    active: Option<(u64, Run)>,
-    session: Option<i64>,
-    pub warnings: u64,
+
+#[derive(Default)]
+struct SplitClock {
+    phase_start: f64,
+    shield: Option<(Damage, f64)>,
+    shield_closed: bool,
+    last_leg: Option<f64>,
+    vulnerable: Option<f64>,
+    body_killed: Option<f64>,
+    pylons: Option<f64>,
+    vulnerability_count: u32,
+    switches_during_pylons: u32,
 }
-impl Engine {
-    pub fn new() -> Self {
-        Self { state: ParserState::new(), active: None, session: None, warnings: 0 }
+struct Fight {
+    offset: u64,
+    run: Run,
+    start: Option<f64>,
+    last_time: Option<f64>,
+    phase: Option<Phase>,
+    clocks: SplitClock,
+    initial_shield: Option<Damage>,
+}
+impl Fight {
+    fn new(offset: u64) -> Self {
+        Self { offset, run: Run::new(), start:None, last_time:None, phase:None, clocks:SplitClock::default(), initial_shield:None }
     }
-    pub fn active(&self) -> bool { self.active.is_some() }
-    pub fn reset(&mut self) { let warnings = self.warnings; *self = Self::new(); self.warnings = warnings; }
-    fn discard(&mut self) {
-        self.warnings += 1;
-        self.active = None;
-        self.state = ParserState::with_log_start_time(self.session.unwrap_or(0));
+    fn mark(&mut self) { self.run.is_bugged_run=true; }
+    fn close_shield(&mut self,t:f64) {
+        if self.phase.is_none() || self.clocks.shield_closed { return; }
+        if let (Some((damage,start)),Some(p))=(self.clocks.shield.take(),self.phase.as_mut()) {
+            let duration=(t-start).max(0.0);
+            p.total_shield_time+=duration;
+            p.shield_changes.push(ShieldChange{shield_time:duration,status_effect:damage,shield_order:p.shield_changes.len() as i32+1});
+        }
+        self.clocks.shield_closed=true;
+        self.clocks.last_leg=Some(t);
     }
-    pub fn bad_line(&mut self) { self.warnings += 1; if let Some((_, run)) = &mut self.active { run.is_bugged_run = true; } }
-    pub fn line(&mut self, offset: u64, bytes: &[u8]) -> Option<Completed> {
-        let line = match std::str::from_utf8(bytes) {
-            Ok(s) => s.trim_end_matches(['\r', '\n']),
-            Err(_) => { self.bad_line(); return None; }
-        };
-        if line.contains(LOG_START_TIME) {
-            if let Some(epoch) = get_log_time(line) {
-                if self.session != Some(epoch) {
-                    self.active = None;
-                    self.state = ParserState::with_log_start_time(epoch);
-                    self.session = Some(epoch);
+    fn close_phase(&mut self,t:f64) {
+        if let Some(mut p)=self.phase.take() {
+            p.total_time=(t-self.clocks.phase_start).max(0.0);
+            if let (Some(start),Some(end))=(self.clocks.vulnerable,self.clocks.body_killed) {
+                p.total_body_kill_time=(end-start).max(0.0);
+            }
+            if let Some(start)=self.clocks.pylons { p.total_pylon_time=(t-start).max(0.0); }
+            self.run.phases.push(p);
+        }
+    }
+    fn begin_phase(&mut self,number:u8,t:f64) {
+        if let Some(p)=&self.phase {
+            if number as i32==p.phase_number { return; }
+            if (number as i32)<p.phase_number { self.mark(); return; }
+            if number as i32!=p.phase_number+1 { self.mark(); }
+            self.close_phase(t);
+        } else {
+            if number!=1 { self.mark(); }
+            if let Some(start)=self.start { self.run.total_times.total_flight_time=(t-start).max(0.0); } else { self.mark(); }
+        }
+        self.phase=Some(Phase{phase_number:number as i32,..Phase::default()});
+        self.clocks=SplitClock { phase_start:t,last_leg:Some(t),shield:self.initial_shield.take().map(|d|(d,t)),..SplitClock::default() };
+    }
+    fn shield(&mut self,d:Damage,t:f64) {
+        let Some(number)=self.phase.as_ref().map(|p|p.phase_number) else { self.initial_shield=Some(d); return; };
+        if self.clocks.shield_closed || self.clocks.pylons.is_some() {
+            // The next shield may already be advertised during phase-three pylons.
+            self.initial_shield=Some(d);
+            if number==3 && self.clocks.pylons.is_some() {
+                self.clocks.switches_during_pylons=self.clocks.switches_during_pylons.saturating_add(1);
+                if self.clocks.switches_during_pylons>1 {
+                    self.mark(); self.begin_phase(4,t);
                 }
-            } else { self.bad_line(); }
-            return None;
+            }
+            return;
         }
-        if line.contains(HEIST_START) && self.active.is_none() {
-            self.state = ParserState::with_log_start_time(self.session.unwrap_or(0));
-            self.active = Some((offset, Run::new()));
+        if let Some((previous,from))=self.clocks.shield.replace((d,t)) {
+            if let Some(p)=self.phase.as_mut() {
+                let delta=(t-from).max(0.0);
+                p.total_shield_time+=delta;
+                p.shield_changes.push(ShieldChange{shield_time:delta,status_effect:previous,shield_order:p.shield_changes.len() as i32+1});
+            }
         }
-        let (_, run) = self.active.as_mut()?;
-        // Only relevant event lines need a timestamp. Reject malformed relevant records
-        // before entering the legacy parser; unexpected panics are isolated to one run.
-        let relevant = [ELEVATOR_EXIT, SHIELD_SWITCH, LEG_KILL, BODY_VULNERABLE, STATE_CHANGE,
-            PYLONS_LAUNCHED, PHASE_START, ABORT_MISSION, BACK_TO_TOWN].iter().any(|s| line.contains(*s))
-            || SHIELD_PHASE_ENDINGS.iter().any(|s| line.contains(*s));
-        if relevant && !line.split_whitespace().next().and_then(|s| s.trim_start_matches('!').parse::<f64>().ok()).is_some_and(|t| t.is_finite() && (0.0..=1e9).contains(&t)) {
-            self.discard(); return None;
+    }
+    fn leg(&mut self,leg:Leg,t:f64) {
+        if self.phase.is_none() { self.mark(); return; }
+        if !self.clocks.shield_closed && self.clocks.shield.is_some() { self.mark(); self.close_shield(t); }
+        let Some(p)=self.phase.as_mut() else { return; };
+        if p.leg_breaks.iter().any(|s|s.leg_position==leg) { self.run.is_bugged_run=true; }
+        let from=self.clocks.last_leg.replace(t).unwrap_or(self.clocks.phase_start);
+        let delta=(t-from).max(0.0);
+        p.total_leg_time+=delta;
+        p.leg_breaks.push(LegBreak{leg_break_time:delta,leg_position:leg,leg_order:p.leg_breaks.len() as i32+1});
+    }
+    fn observe(&mut self,obs:Observation,epoch:Option<i64>)->bool {
+        let t=obs.time;
+        // Squad/name messages do not advance the combat clock.
+        match obs.event {
+            Event::Player(name)=>{
+                if self.run.player_name.is_empty() { self.run.player_name=name; }
+                self.run.squad_members.retain(|m|m.member_name!=self.run.player_name);
+                self.run.is_solo_run=self.run.squad_members.is_empty(); return false;
+            }
+            Event::Member(name)=>{
+                if name!=self.run.player_name && self.run.squad_members.len()<3 && !self.run.squad_members.iter().any(|m|m.member_name==name) {
+                    self.run.squad_members.push(SquadMember{member_name:name}); self.run.is_solo_run=false;
+                } return false;
+            }
+            Event::Job|Event::Session(_)=>return false,
+            _=>{}
         }
-        if catch_unwind(AssertUnwindSafe(|| parse_run(run, line, &mut self.state))).is_err() {
-            self.discard(); return None;
+        if self.last_time.is_some_and(|last|t<last) { self.mark(); return false; }
+        self.last_time=Some(t);
+        match obs.event {
+            Event::Elevator=>{
+                if self.start.is_none() {
+                    self.start=Some(t);
+                    if let Some(epoch)=epoch { self.run.time_stamp=epoch+t as i64; }
+                }
+            }
+            Event::Phase(n)=>self.begin_phase(n,t),
+            Event::Shield(d)=>self.shield(d,t),
+            Event::ShieldDone=>self.close_shield(t),
+            Event::Leg(leg)=>self.leg(leg,t),
+            Event::Vulnerable=>{
+                if self.phase.is_none() { self.mark(); return false; }
+                self.clocks.vulnerable.get_or_insert(t);
+                self.clocks.vulnerability_count=self.clocks.vulnerability_count.saturating_add(1);
+                if self.phase.as_ref().is_some_and(|p|p.phase_number==4) && self.clocks.vulnerability_count>=3 {
+                    self.clocks.body_killed=Some(t); self.close_phase(t); return true;
+                }
+            }
+            Event::BodyKilled=>{if self.clocks.vulnerable.is_some(){self.clocks.body_killed.get_or_insert(t);}}
+            Event::Pylons=>{self.clocks.pylons.get_or_insert(t);}
+            Event::Abort=>{self.run.is_aborted_run=true;return true;}
+            _=>{}
         }
-        if !self.state.run_ended { return None; }
-        let (start, mut run) = self.active.take()?;
-        self.state = ParserState::with_log_start_time(self.session.unwrap_or(0));
-        // No fabricated timestamp or zero-start record; a subsequent valid run still works.
-        if run.time_stamp <= 0 || self.session.is_none() { self.warnings += 1; return None; }
-        if !run.total_times.total_time.is_finite() || run.total_times.total_time < 0.0 { self.warnings += 1; return None; }
-        if run.phases.len() != 4 && !run.is_aborted_run { run.is_bugged_run = true; }
-        Some(Completed { key: format!("{}:{}", self.session?, start), run })
+        false
+    }
+    fn complete(mut self,epoch:i64)->Option<Completed> {
+        self.start?;
+        if self.run.time_stamp<=0 { return None; }
+        if !self.run.is_aborted_run && !self.run.phases.iter().map(|p| p.phase_number).eq(1..=4) { self.mark(); }
+        let totals=&mut self.run.total_times;
+        totals.total_time=totals.total_flight_time;
+        for p in &self.run.phases {
+            totals.total_time+=p.total_time;
+            totals.total_shield_time+=p.total_shield_time;
+            totals.total_leg_time+=p.total_leg_time;
+            totals.total_body_time+=p.total_body_kill_time;
+            totals.total_pylon_time+=p.total_pylon_time;
+        }
+        if !totals.total_time.is_finite() || totals.total_time<0.0 { return None; }
+        Some(Completed{key:format!("{epoch}:{}",self.offset),run:self.run})
+    }
+}
+
+pub struct Engine { epoch:Option<i64>, fight:Option<Fight>, pub warnings:u64 }
+impl Engine {
+    pub fn new()->Self { Self { epoch:None,fight:None,warnings:0 } }
+    pub fn active(&self)->bool { self.fight.is_some() }
+    pub fn reset(&mut self) { self.epoch=None; self.fight=None; }
+    pub fn bad_line(&mut self) {
+        self.warnings=self.warnings.saturating_add(1);
+        if let Some(f)=&mut self.fight { f.mark(); }
+    }
+    pub fn line(&mut self,offset:u64,bytes:&[u8])->Option<Completed> {
+        let line=match std::str::from_utf8(bytes) { Ok(s)=>s.trim_end_matches(['\r','\n']),Err(_)=>{self.bad_line();return None;} };
+        let observation=match events::decode(line) { Ok(Some(e))=>e,Ok(None)=>return None,Err(_)=>{self.bad_line();return None;} };
+        match &observation.event {
+            Event::Session(epoch)=>{
+                if self.epoch!=Some(*epoch) { self.fight=None; self.epoch=Some(*epoch); }
+                return None;
+            }
+            Event::Job=>{
+                if self.fight.is_none() { self.fight=Some(Fight::new(offset)); }
+                return None;
+            }
+            _=>{}
+        }
+        if self.fight.as_mut()?.observe(observation,self.epoch) {
+            let fight=self.fight.take()?;
+            let result=self.epoch.and_then(|epoch|fight.complete(epoch));
+            if result.is_none(){self.warnings=self.warnings.saturating_add(1);}
+            result
+        } else { None }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    const HEADER: &str = "0.376 Sys [Diag]: Current time: Sun Nov 22 16:00:48 2026 [UTC: Sun Nov 22 08:00:48 2026]";
-    fn feed(e: &mut Engine, line: &str) -> Option<Completed> { e.line(20, line.as_bytes()) }
+    use crate::events::{HEADER,JOB,EXIT,ABORT,PHASE_MARKERS,SHIELD,LEG,VULNERABLE,PYLONS};
+    fn header(e:&mut Engine) { e.line(0,format!("0.376 {HEADER} Sun Nov 22 16:00:48 2026 [UTC: Sun Nov 22 08:00:48 2026]").as_bytes()); }
+    fn feed(e:&mut Engine,t:f64,s:&str)->Option<Completed> { e.line((t*1000.0) as u64,format!("{t:.3} {s}").as_bytes()) }
     #[test]
-    fn abort_replays_deterministically() {
-        let replay = || {
-            let mut e = Engine::new();
-            feed(&mut e, HEADER);
-            feed(&mut e, HEIST_START);
-            feed(&mut e, &format!("10.1 {ELEVATOR_EXIT}"));
-            feed(&mut e, &format!("11.1 {ABORT_MISSION}")).unwrap()
-        };
-        let a = replay(); let b = replay();
-        assert!(a.run.is_aborted_run);
-        assert_eq!(a.key, b.key);
-        assert_eq!(a.run.time_stamp, b.run.time_stamp);
+    fn full_four_phase_replay() {
+        let mut e=Engine::new();header(&mut e);
+        feed(&mut e,9.0,JOB);feed(&mut e,10.0,EXIT);
+        feed(&mut e,12.0,PHASE_MARKERS[0]);
+        feed(&mut e,12.2,&format!("{SHIELD} DT_FIRE"));
+        feed(&mut e,13.0,&format!("{SHIELD} DT_VIRAL"));
+        feed(&mut e,14.0,"ResourceLoader DBntyFourInterPrTk0920TheBusiness");
+        feed(&mut e,15.0,&format!("{LEG}: ARM_RIGHT"));
+        feed(&mut e,16.0,VULNERABLE);
+        feed(&mut e,17.0,"CamperHeistOrbFight.lua: Landscape - New State: 3");
+        feed(&mut e,18.0,PYLONS);
+        feed(&mut e,20.0,PHASE_MARKERS[1]);
+        feed(&mut e,25.0,PHASE_MARKERS[2]);
+        feed(&mut e,35.0,PHASE_MARKERS[3]);
+        feed(&mut e,36.0,VULNERABLE);feed(&mut e,37.0,VULNERABLE);
+        let result=feed(&mut e,40.0,VULNERABLE).unwrap();
+        assert_eq!(result.run.phases.len(),4);
+        assert_eq!(result.run.total_times.total_time,30.0);
+        assert!((result.run.total_times.total_shield_time-1.8).abs()<1e-9);
+        assert_eq!(result.run.total_times.total_leg_time,1.0);
+        assert_eq!(result.run.total_times.total_pylon_time,2.0);
+        assert!(!result.run.is_aborted_run);assert!(!e.active());
     }
     #[test]
-    fn malformed_event_cannot_kill_next_run() {
-        let mut e = Engine::new();
-        feed(&mut e, HEADER); feed(&mut e, HEIST_START);
-        feed(&mut e, &format!("10.0 {SHIELD_SWITCH} UNKNOWN"));
-        assert!(!e.active());
-        feed(&mut e, HEIST_START);
-        feed(&mut e, &format!("20.0 {ELEVATOR_EXIT}"));
-        assert!(feed(&mut e, &format!("21.0 {ABORT_MISSION}")).is_some());
-        assert_eq!(e.warnings, 1);
+    fn malformed_lines_do_not_end_the_worker() {
+        let mut e=Engine::new();header(&mut e);feed(&mut e,1.0,JOB);
+        feed(&mut e,2.0,EXIT);e.line(30,b"\xff");feed(&mut e,3.0,&format!("{SHIELD} DT_UNKNOWN"));
+        let first=feed(&mut e,4.0,ABORT).unwrap();assert!(first.run.is_bugged_run);
+        feed(&mut e,5.0,JOB);feed(&mut e,6.0,EXIT);
+        let second=feed(&mut e,7.0,ABORT).unwrap();
+        assert!(second.run.is_aborted_run);assert!(!second.run.is_bugged_run);assert_eq!(e.warnings,2);
     }
     #[test]
-    fn full_four_phase_run() {
-        let mut e = Engine::new();
-        feed(&mut e, HEADER); feed(&mut e, HEIST_START);
-        feed(&mut e, &format!("10.0 {ELEVATOR_EXIT}"));
-        feed(&mut e, &format!("12.0 {PHASE_1_START}"));
-        feed(&mut e, &format!("20.0 {PHASE_ENDS_1}"));
-        feed(&mut e, &format!("25.0 {PHASE_ENDS_2}"));
-        feed(&mut e, &format!("35.0 {PHASE_ENDS_3}"));
-        for t in [36.0,37.0] { feed(&mut e, &format!("{t} {BODY_VULNERABLE}")); }
-        let r = feed(&mut e, &format!("40.0 {BODY_VULNERABLE}")).unwrap().run;
-        assert_eq!(r.phases.len(), 4);
-        assert_eq!(r.total_times.total_time, 30.0);
-        assert!(!r.is_aborted_run);
-    }
-    #[test]
-    fn reset_clears_active_run_and_time_anchor() {
-        let mut e = Engine::new();
-        feed(&mut e, HEADER); feed(&mut e, HEIST_START);
-        e.reset(); assert!(!e.active()); assert!(e.session.is_none());
+    fn reset_drops_unfinished_fight() {
+        let mut e=Engine::new();header(&mut e);feed(&mut e,1.0,JOB);
+        e.reset();assert!(!e.active());assert!(e.epoch.is_none());
     }
 }

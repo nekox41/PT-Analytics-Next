@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-mod constants; mod models; mod parser; mod parser_state; mod line_utils;
+mod models; mod events;
 mod engine; mod tail; mod store;
 use engine::{Completed, Engine};
 use tail::{Tail, Framer, Line};
