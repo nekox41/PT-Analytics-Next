@@ -1,6 +1,6 @@
 [package]
 name = "pt-analytics-next"
-version = "0.1.9"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 description = "Resilient local Profit-Taker run analytics"
@@ -8,6 +8,7 @@ description = "Resilient local Profit-Taker run analytics"
 tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
+tauri-runtime = "2"
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -16,6 +17,7 @@ regex = "1"
 same-file = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
 [target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
 clipboard-win = "5.4"
 base64 = "0.22"
 image = { version = "0.25", default-features = false, features = ["png"] }

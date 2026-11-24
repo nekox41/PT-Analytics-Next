@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PT Analytics Overlay</title><link rel="stylesheet" href="overlay.css"><script defer src="report.js"></script><script defer src="overlay-model.js"></script><script defer src="overlay.js"></script></head>
+<body><main id="overlay">
+<header id="handle"><span class="brand">PT ANALYTICS NEXT</span><span id="live-status"></span><button id="finish" type="button" hidden>完成调整</button></header>
+<section class="total card"><div><span class="label">总用时</span><div class="value" id="total">—</div></div><div class="total-right"><span id="compare-label"></span><b id="comparison"></b><span id="shield"></span></div></section>
+<section id="stages" class="stages"></section>
+<section id="details" class="details" hidden></section>
+<div id="error" role="status"></div><button id="resize" type="button" aria-label="调整窗口大小" hidden>◢</button>
+</main></body></html>

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod models; mod events;
-mod engine; mod tail; mod store; mod clipboard;
+mod engine; mod tail; mod store; mod clipboard; mod overlay;
 use engine::{Completed, Engine};
 use tail::{Tail, Framer, Line};
 use store::{Store, Record};
@@ -12,7 +12,7 @@ use tauri::{Manager, State};
 
 #[derive(Clone, Serialize, Default)]
 struct Status { mode: String, path: String, offset: u64, size: u64, warnings: u64, active: bool, lifecycle: Option<Lifecycle>, error: String, revision: u64 }
-struct Shared { path: Mutex<PathBuf>, status: Mutex<Status>, store: Mutex<Store> }
+struct Shared { path: Mutex<PathBuf>, status: Mutex<Status>, store: Mutex<Store>, overlay:Mutex<overlay::Runtime> }
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> { m.lock().unwrap_or_else(|e| e.into_inner()) }
 fn default_path() -> PathBuf {
     #[cfg(target_os="windows")]
@@ -20,15 +20,16 @@ fn default_path() -> PathBuf {
     #[cfg(not(target_os="windows"))]
     { std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default().join(".local/share/Steam/steamapps/compatdata/230410/pfx/drive_c/users/steamuser/AppData/Local/Warframe/EE.log") }
 }
-fn worker(shared: Arc<Shared>) {
+fn worker(shared: Arc<Shared>,app:&tauri::AppHandle) {
     let mut tail = Tail::new(); let mut framer = Framer::new(); let mut engine = Engine::new();
     let mut path = PathBuf::new(); let mut pending: VecDeque<Completed> = VecDeque::new();
+    let mut clock=overlay::Clock::default();
     let mut initial_replay=true; let mut checkpoint_dirty=true; let mut caught_up=false;
     loop {
         let desired = lock(&shared.path).clone();
         if desired != path {
             if let Some(item)=engine.reset(EndReason::PathChanged){pending.push_back(item);}
-            path=desired;tail=Tail::new();framer=Framer::new();caught_up=false;checkpoint_dirty=true;
+            path=desired;tail=Tail::new();framer=Framer::new();caught_up=false;checkpoint_dirty=true;clock.reset();overlay::clear(app,&shared);
         }
         let mut status = Status { path: path.to_string_lossy().into_owned(), revision: lock(&shared.status).revision, ..Status::default() };
         // Keep failed writes queued rather than dropping completed runs.
@@ -40,7 +41,7 @@ fn worker(shared: Arc<Shared>) {
         }
         if !pending.is_empty() {
             status.offset=tail.offset; status.warnings=engine.warnings; status.active=engine.active(); status.lifecycle=engine.lifecycle();
-            *lock(&shared.status)=status; thread::sleep(Duration::from_secs(1)); continue;
+            *lock(&shared.status)=status; overlay::clear(app,&shared); thread::sleep(Duration::from_secs(1)); continue;
         }
         if caught_up && checkpoint_dirty {
             let snapshot=engine.snapshot();
@@ -48,20 +49,23 @@ fn worker(shared: Arc<Shared>) {
                 else { lock(&shared.store).save_checkpoint(snapshot.as_ref()) };
             match result {
                 Ok(())=>{if initial_replay { status.revision+=1; } initial_replay=false;checkpoint_dirty=false;}
-                Err(e)=>{status.mode="storage_error".into();status.error=e;status.offset=tail.offset;status.active=engine.active();status.lifecycle=engine.lifecycle();*lock(&shared.status)=status;thread::sleep(Duration::from_secs(1));continue;}
+                Err(e)=>{status.mode="storage_error".into();status.error=e;status.offset=tail.offset;status.active=engine.active();status.lifecycle=engine.lifecycle();*lock(&shared.status)=status;overlay::clear(app,&shared);thread::sleep(Duration::from_secs(1));continue;}
             }
         }
         let mut idle = true;
+        let mut finished=None;
         match tail.poll(&path) {
             Ok(batch) => {
+                let was_live=caught_up&&!initial_replay&&!batch.reset;
                 if batch.reset {
+                    clock.reset();overlay::clear(app,&shared);
                     framer=Framer::new();
                     if let Some(item)=engine.reset(EndReason::LogReset){pending.push_back(item);}
                     checkpoint_dirty=true;
                 }
                 for line in framer.push(&batch.bytes) {
                     match line {
-                        Line::Complete(pos, bytes) => if let Some(item)=engine.line(pos, &bytes) { pending.push_back(item); },
+                        Line::Complete(pos, bytes) => if let Some(item)=engine.line(pos, &bytes) { if was_live&&item.run.is_ranked(){finished=Some(item.clone());} pending.push_back(item); },
                         Line::Oversized => engine.bad_line(),
                     }
                 }
@@ -77,7 +81,10 @@ fn worker(shared: Arc<Shared>) {
             }
         }
         status.offset=tail.offset; status.warnings=engine.warnings; status.active=engine.active(); status.lifecycle=engine.lifecycle();
+        let live=status.mode=="live"&&!initial_replay;
         *lock(&shared.status)=status;
+        if live && overlay::requested(&shared) {overlay::update(app,&shared,clock.sample(&engine),finished.as_ref());}
+        else {overlay::clear(app,&shared);}
         if idle && pending.is_empty() && !(caught_up && checkpoint_dirty) { thread::sleep(Duration::from_millis(250)); }
     }
 }
@@ -122,17 +129,26 @@ fn main() {
         // Count process launches, not page reloads or polling. A prompt failure must not block log parsing.
         if let Err(e)=store.register_launch(){eprintln!("launch counter: {e}");}
         let path=store.path().map(PathBuf::from).unwrap_or_else(default_path);
-        let shared=Arc::new(Shared { path: Mutex::new(path.clone()), store: Mutex::new(store),
+        let config=store.overlay_config();
+        let shared=Arc::new(Shared { overlay:Mutex::new(overlay::Runtime::new(config)),path: Mutex::new(path.clone()), store: Mutex::new(store),
             status: Mutex::new(Status { path:path.to_string_lossy().into_owned(), mode:"waiting".into(), ..Status::default() }) });
         app.manage(shared.clone());
+        if let Err(e)=overlay::initialize(app.handle(),&shared){eprintln!("Overlay: {e}");}
+        let app_handle=app.handle().clone();
         thread::Builder::new().name("ee-log-reader".into()).spawn(move || loop {
             // A last-resort supervisor; expected I/O and parsing errors use Result.
-            if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| worker(shared.clone()))).is_err() {
+            if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| worker(shared.clone(),&app_handle))).is_err() {
+                overlay::clear(&app_handle,&shared);
                 let mut status=lock(&shared.status);status.mode="retry".into();status.error="日志工作线程异常，正在重新回放".into();drop(status);
                 thread::sleep(Duration::from_secs(1));
             }
         })?;
         Ok(())
-    }).invoke_handler(tauri::generate_handler![get_status,get_runs,rename_run,favorite_run,delete_run,set_log_path,clipboard::copy_report_text,clipboard::copy_report_image,open_github,claim_star_prompt])
+    }).on_window_event(|window,event|{
+        if let tauri::WindowEvent::CloseRequested{api,..}=event {
+            if window.label()=="main"{window.app_handle().exit(0);}
+            else if window.label()=="overlay"{api.prevent_close();}
+        }
+    }).invoke_handler(tauri::generate_handler![get_status,get_runs,rename_run,favorite_run,delete_run,set_log_path,clipboard::copy_report_text,clipboard::copy_report_image,open_github,claim_star_prompt,overlay::get_overlay_settings,overlay::get_overlay_frame,overlay::set_overlay_settings,overlay::edit_overlay,overlay::reset_overlay,overlay::drag_overlay])
       .run(tauri::generate_context!()).expect("failed to start PT Analytics Next");
 }

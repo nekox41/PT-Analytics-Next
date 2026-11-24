@@ -51,3 +51,12 @@ dialog{width: min(430px,90vw);background:var(--panel);color:var(--text);border:1
 .damage-icon{display:inline-block;width:15px;height:15px;flex:0 0 15px;background:var(--text);mask:var(--damage-image) center/contain no-repeat;-webkit-mask:var(--damage-image) center/contain no-repeat;}
 
 #author-link{flex-shrink:0;color:var(--muted);font-size:12px;padding:3px 0;white-space:nowrap}#author-link:hover{color:var(--blue);background:transparent;text-decoration:underline}footer{gap:12px}.about-links{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}.about-links .outline{border:1px solid var(--line)}.star-hero{display:flex;align-items:center;gap:14px}.star-hero img{border-radius:12px}.star-hero h2{margin:0}.star-hero+p{margin-top:16px}#star-prompt .dialog-actions{flex-wrap:wrap}
+
+/* Overlay settings */
+#overlay-panel h2{margin:0}
+.overlay-range{display:grid;grid-template-columns:1fr auto;gap:8px;margin:14px 0;color:var(--text)}
+.overlay-range input{grid-column:1/-1;width:100%;accent-color:#69adff}
+.overlay-range output{color:var(--muted);font-variant-numeric:tabular-nums}
+.overlay-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}
+.overlay-option{display:flex;align-items:center;gap:8px;font-size:14px}
+.overlay-option input{accent-color:#69adff}

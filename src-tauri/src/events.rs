@@ -29,7 +29,7 @@ pub enum Event {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Observation { pub time: f64, pub event: Event }
 
-fn seconds(line: &str) -> Result<f64, &'static str> {
+pub(crate) fn seconds(line: &str) -> Result<f64, &'static str> {
     line.split_whitespace().next().and_then(|s| s.trim_start_matches('!').parse::<f64>().ok())
         .filter(|t| t.is_finite() && (0.0..=1e9).contains(t)).ok_or("invalid event timestamp")
 }

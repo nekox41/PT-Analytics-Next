@@ -1,6 +1,6 @@
 {
   "productName": "PT Analytics Next",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "identifier": "io.github.nekox41.ptanalyticsnext",
   "build": {
     "frontendDist": "../ui"
@@ -13,7 +13,27 @@
         "width": 1440,
         "height": 820,
         "minWidth": 860,
-        "minHeight": 580
+        "minHeight": 580,
+        "label": "main"
+      },
+      {
+        "label": "overlay",
+        "title": "PT Analytics Overlay",
+        "url": "overlay.html",
+        "width": 860,
+        "height": 230,
+        "minWidth": 300,
+        "minHeight": 160,
+        "visible": false,
+        "focus": false,
+        "focusable": false,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": true,
+        "shadow": false,
+        "closable": false
       }
     ],
     "security": {

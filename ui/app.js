@@ -34,7 +34,7 @@ const phaseNames=["第一阶段","第二阶段","第三阶段","第四阶段"];
 const shieldNames={Impact:"冲击",Puncture:"穿刺",Slash:"切割",Heat:"火焰",Cold:"冰冻",Electric:"电击",Toxin:"毒素",Blast:"爆炸",Radiation:"辐射",Gas:"毒气",Magnetic:"磁力",Viral:"病毒",Corrosive:"腐蚀",NoShield:"无"};
 const legs={FrontLeft:"FL",FrontRight:"FR",BackLeft:"BL",BackRight:"BR"};
 let state={page:"home",runs:[],selected:null,status:{mode:"waiting"},revision:-1,sort:"date",asc:false,filter:"complete",search:"",pageNo:0,chosen:new Set(),single:localStorage.getItem("single")==="1",light:localStorage.getItem("light")==="1",chartLimit:20};
-let toastTimer,dialogAction,polling=false;
+let toastTimer,dialogAction,polling=false,overlaySettings=null,overlayBusy=false,overlayReadBusy=false;
 function toast(t){$("toast").textContent=t;$("toast").classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>$("toast").classList.remove("show"),3500)}
 function players(r){
  if(!r)return [];
@@ -160,14 +160,49 @@ function renderAnalytics(){
  $("content").innerHTML=metricCards(times,true)+'<div class="chart"><div class="storage-tools"><span class="muted">有效任务 '+rows.length+' 场 · PB '+fmt(best)+'s</span><select id="chart-limit"><option value="10">最近 10 场</option><option value="20">最近 20 场</option><option value="50">最近 50 场</option><option value="100">最近 100 场</option></select></div><h2>任务耗时趋势</h2>'+(svg||'<div class="empty"><p>完成有效任务后将显示趋势图。</p></div>')+'<div class="legend"><span style="color:#69adff">● 总用时</span><span style="color:#e68ce4">● 信标耗时</span></div></div>';
  $("chart-limit").value=String(state.chartLimit);$("chart-limit").onchange=e=>{state.chartLimit=Number(e.target.value);renderAnalytics()};
 }
+function renderOverlayPanel(){
+ const el=$("overlay-panel");if(!el)return;
+ if(!overlaySettings){el.innerHTML='<h2>游戏内 Overlay</h2><p class="muted">正在读取设置…</p><button data-action="overlay-refresh">重新读取</button>';return;}
+ const o=overlaySettings.config,editing=overlaySettings.editing;
+ const check=(key,label)=>'<label class="overlay-option"><input type="checkbox" data-overlay="'+key+'" '+(o[key]?"checked":"")+' '+(overlayBusy?"disabled":"")+'>'+label+'</label>';
+ const range=(key,label,min,max)=>'<div class="overlay-range"><label for="overlay-'+key+'">'+label+'</label><output id="overlay-'+key+'-value">'+o[key]+'%</output><input id="overlay-'+key+'" type="range" min="'+min+'" max="'+max+'" step="5" data-overlay="'+key+'" value="'+o[key]+'" '+(overlayBusy?"disabled":"")+'></div>';
+ el.innerHTML=(overlaySettings.error?'<p class="error">'+esc(overlaySettings.error)+'</p>':'')+'<div class="setting-row"><div><h2>游戏内 Overlay</h2><p>独立透明置顶卡片，正常游玩时鼠标穿透。</p></div><button role="switch" aria-checked="'+o.enabled+'" class="'+(o.enabled?"primary":"")+'" data-action="overlay-toggle" '+(overlayBusy?"disabled":"")+'>'+(o.enabled?"已开启":"已关闭")+'</button></div><div class="setting-row"><span>布局</span><select data-overlay="vertical" '+(overlayBusy?"disabled":"")+'><option value="false" '+(!o.vertical?"selected":"")+'>横向</option><option value="true" '+(o.vertical?"selected":"")+'>纵向</option></select></div>'+range("scale","窗口缩放",50,200)+range("opacity","背景不透明度",20,100)+'<div class="overlay-options">'+check("details","当前阶段分项")+check("compare","与个人最佳已完成分段对比")+check("auto_hide","非任务期间自动隐藏")+check("foreground_only","仅 Warframe 前台显示")+'</div><div class="about-links"><button class="primary" data-action="overlay-edit" '+(overlayBusy?"disabled":"")+'>'+(editing?"完成调整并保存":"调整位置与大小")+'</button><button data-action="overlay-reset" '+(overlayBusy?"disabled":"")+' >恢复默认</button></div><p class="muted">调整时拖动顶部，右下角缩放；关闭调整模式后鼠标穿透。支持窗口化和无边框全屏。实时显示为估算，最终成绩以日志为准。</p>';
+}
+async function refreshOverlaySettings(){
+ if(overlayBusy||overlayReadBusy)return;overlayReadBusy=true;
+ try{
+  const value=await invoke("get_overlay_settings");
+  if(!overlayBusy&&JSON.stringify(value)!==JSON.stringify(overlaySettings)){overlaySettings=value;renderOverlayPanel();}
+ }catch(e){if($("overlay-panel")&&!overlaySettings)$("overlay-panel").innerHTML='<h2>游戏内 Overlay</h2><p class="error">'+esc(String(e))+'</p><button data-action="overlay-refresh">重试</button>'}
+ finally{overlayReadBusy=false}
+}
+async function overlayAction(command,args={}){
+ if(overlayBusy)return;
+ overlayBusy=true;renderOverlayPanel();
+ try{overlaySettings=await invoke(command,args);}
+ catch(e){toast(String(e));}
+ finally{overlayBusy=false;renderOverlayPanel();refreshOverlaySettings();}
+}
+document.addEventListener("input",e=>{if(e.target.matches('input[type="range"][data-overlay]')){const out=$("overlay-"+e.target.dataset.overlay+"-value");if(out)out.textContent=e.target.value+"%";}});
+document.addEventListener("change",e=>{
+ const t=e.target,k=t.dataset.overlay;if(!k||!overlaySettings||overlayBusy)return;
+ const value=t.type==="checkbox"?t.checked:t.type==="range"?Number(t.value):t.value==="true";
+ overlayAction("set_overlay_settings",{config:{...overlaySettings.config,[k]:value}});
+});
+
 function renderSettings(){
- $("content").innerHTML='<div class="settings"><article class="settings-card"><h2>常规</h2><div class="setting-row"><div><b>界面主题</b><p>深色 / 浅色</p></div><button class="primary" data-action="theme">'+(state.light?"浅色":"深色")+'</button></div><div class="setting-row"><div><b>阶段布局</b><p>双列卡片或单列卡片</p></div><button data-action="layout">'+(state.single?"单列":"双列")+'</button></div></article><article class="settings-card"><h2>日志监听</h2><p class="muted">默认读取 Windows 用户目录下的 Warframe / EE.log，启动时回放历史记录，随后持续监听。</p><div class="path-control"><input id="log-path" placeholder="EE.log 的绝对路径" value="'+esc(state.status.path||"")+'"><button class="primary" data-action="save-path">保存</button><button data-action="reset-path">恢复默认</button></div><div class="setting-row"><span>连接状态</span><b id="setting-status"></b></div><div class="setting-row"><span>读取位置</span><span id="setting-offset" class="muted"></span></div><div id="setting-error" class="error"></div></article><article class="settings-card"><h2><img src="logo.svg" alt="" width="32" height="32" style="vertical-align:middle;border-radius:6px;margin-right:8px">关于 PT Analytics Next</h2><p>v0.1.9 · MIT License</p><p>Aameow&ChatGPT 开发的高性能、稳定且可靠的大蜘蛛竞速工具，基于 Tauri2。</p><p class="muted">非 Warframe 官方应用。第三方游戏素材保留原权利。</p><div class="about-links"><button class="primary" data-action="github:repository">GitHub 仓库</button><button class="outline" data-action="github:author">Aameow 的 GitHub</button></div></article></div>';
+ $("content").innerHTML='<div class="settings"><article class="settings-card"><h2>常规</h2><div class="setting-row"><div><b>界面主题</b><p>深色 / 浅色</p></div><button class="primary" data-action="theme">'+(state.light?"浅色":"深色")+'</button></div><div class="setting-row"><div><b>阶段布局</b><p>双列卡片或单列卡片</p></div><button data-action="layout">'+(state.single?"单列":"双列")+'</button></div></article><article class="settings-card" id="overlay-panel"></article><article class="settings-card"><h2>日志监听</h2><p class="muted">默认读取 Windows 用户目录下的 Warframe / EE.log，启动时回放历史记录，随后持续监听。</p><div class="path-control"><input id="log-path" placeholder="EE.log 的绝对路径" value="'+esc(state.status.path||"")+'"><button class="primary" data-action="save-path">保存</button><button data-action="reset-path">恢复默认</button></div><div class="setting-row"><span>连接状态</span><b id="setting-status"></b></div><div class="setting-row"><span>读取位置</span><span id="setting-offset" class="muted"></span></div><div id="setting-error" class="error"></div></article><article class="settings-card"><h2><img src="logo.svg" alt="" width="32" height="32" style="vertical-align:middle;border-radius:6px;margin-right:8px">关于 PT Analytics Next</h2><p>v0.2.0 · MIT License</p><p>Aameow&ChatGPT 开发的高性能、稳定且可靠的大蜘蛛竞速工具，基于 Tauri2。</p><p class="muted">非 Warframe 官方应用。第三方游戏素材保留原权利。</p><div class="about-links"><button class="primary" data-action="github:repository">GitHub 仓库</button><button class="outline" data-action="github:author">Aameow 的 GitHub</button></div></article></div>';
+ renderOverlayPanel();refreshOverlaySettings();
 }
 function openDialog(title,description,value,action){$("dialog-title").textContent=title;$("dialog-description").textContent=description;$("dialog-input").hidden=value===null;$("dialog-input").value=value??"";dialogAction=action;$("edit").showModal();if(value!==null){$("dialog-input").focus();$("dialog-input").select()}}
 $("dialog-cancel").onclick=()=>$("edit").close();
 $("edit-form").onsubmit=async e=>{e.preventDefault();try{await dialogAction?.($("dialog-input").value);$("edit").close();await refresh(true)}catch(err){toast(String(err))}};
 async function action(a){
  const [cmd,arg]=a.split(":");const id=Number(arg),r=state.runs.find(x=>x.run_id===id);
+ if(cmd==="overlay-refresh"){await refreshOverlaySettings();return}
+ if(cmd==="overlay-toggle"&&overlaySettings){await overlayAction("set_overlay_settings",{config:{...overlaySettings.config,enabled:!overlaySettings.config.enabled}});return}
+ if(cmd==="overlay-edit"&&overlaySettings){await overlayAction("edit_overlay",{editing:!overlaySettings.editing});return}
+ if(cmd==="overlay-reset"){await overlayAction("reset_overlay");return}
  if(cmd==="github"){await invoke("open_github",{destination:arg});return}
  if(cmd==="page"){state.page=arg;render();return}
  if(cmd==="theme"){state.light=!state.light;localStorage.setItem("light",state.light?"1":"0");render();return}
@@ -199,5 +234,5 @@ $("star-visit").onclick=async()=>{
  try{await invoke("open_github",{destination:"repository"});$("star-prompt").close();}
  catch(e){toast(String(e));}
 };
-render();refresh(true);setInterval(()=>refresh(),750);
+render();refresh(true);setInterval(()=>{refresh();if(state.page==="settings")refreshOverlaySettings()},750);
 setTimeout(showStarPrompt,900);

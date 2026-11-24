@@ -104,6 +104,15 @@ impl Store {
         let changed=self.conn.execute("INSERT OR IGNORE INTO settings(key,value) SELECT 'star_prompt_shown','1' WHERE EXISTS (SELECT 1 FROM settings WHERE key='app_launch_count' AND CAST(value AS INTEGER)>=10)",[]).map_err(err)?;
         Ok(changed==1)
     }
+    pub fn overlay_config(&self)->crate::overlay::Config {
+        let value:Option<String>=self.conn.query_row("SELECT value FROM settings WHERE key='overlay_config'",[],|r|r.get(0)).ok();
+        let mut config:crate::overlay::Config=value.and_then(|v|serde_json::from_str(&v).ok()).unwrap_or_default();
+        config.normalize();config
+    }
+    pub fn set_overlay_config(&self,config:&crate::overlay::Config)->Result<(),String>{
+        let value=serde_json::to_string(config).map_err(err)?;
+        self.conn.execute("INSERT INTO settings(key,value) VALUES ('overlay_config',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",[value]).map_err(err)?;Ok(())
+    }
     pub fn path(&self) -> Option<String> {
         self.conn.query_row("SELECT value FROM settings WHERE key='log_path'", [], |r| r.get(0)).ok()
     }
@@ -179,6 +188,17 @@ mod tests {
         assert_eq!(rows.iter().find(|r|r.run.time_stamp==100).unwrap().display_number,Some(2));
         assert_eq!(rows.iter().find(|r|r.run.time_stamp==50).unwrap().display_number,Some(1));
         assert!(rows.iter().filter(|r|[150,160].contains(&r.run.time_stamp)).all(|r|r.display_number.is_none()));
+    }
+    #[test]
+    fn overlay_config_is_local_and_survives_reopen(){
+        let d=tempfile::tempdir().unwrap();let path=d.path().join("overlay.sqlite3");
+        {
+            let s=Store::open(&path).unwrap();let mut c=s.overlay_config();
+            assert!(!c.enabled);c.enabled=true;c.x=Some(-240);c.y=Some(50);c.width=Some(560.);c.height=Some(220.);c.opacity=65;
+            s.set_overlay_config(&c).unwrap();
+        }
+        let s=Store::open(&path).unwrap();let c=s.overlay_config();
+        assert!(c.enabled);assert_eq!(c.x,Some(-240));assert_eq!(c.width,Some(560.));assert_eq!(c.opacity,65);
     }
     #[test]
     fn star_prompt_only_once_on_tenth_launch_and_persists() {

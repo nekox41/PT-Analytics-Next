@@ -36,7 +36,7 @@ for name, url in sources.items():
     if data is None:
         for attempt in range(3):
             try:
-                with urlopen(Request(url, headers={"User-Agent": "PT-Analytics-Next/0.1.9 (build-time asset download)"}), timeout=25) as response:
+                with urlopen(Request(url, headers={"User-Agent": "PT-Analytics-Next/0.2.0 (build-time asset download)"}), timeout=25) as response:
                     data = response.read(2 * 1024 * 1024 + 1)
                 if len(data) > 2 * 1024 * 1024:
                     raise ValueError("Icon response too large")

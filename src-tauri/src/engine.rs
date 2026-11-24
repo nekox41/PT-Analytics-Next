@@ -182,15 +182,74 @@ impl Fight {
     }
 }
 
-pub struct Engine { epoch:Option<i64>, fight:Option<Fight>, local_player:Option<String>, pub warnings:u64 }
+
+/// Read-only projection. No mutation of fight state or persisted results.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct LiveView {
+    pub key: String,
+    pub elapsed: Option<f64>,
+    pub phase: u8,
+    pub phase_elapsed: Option<f64>,
+    pub flight: Option<f64>,
+    pub completed: Vec<Phase>,
+    pub active_metric: &'static str,
+    pub shield: Option<Damage>,
+    pub shield_time: Option<f64>,
+    pub leg_time: Option<f64>,
+    pub body_time: Option<f64>,
+    pub pylon_time: Option<f64>,
+    pub legs: usize,
+    pub uncertain: bool,
+}
+impl Fight {
+    fn live(&self, epoch:i64, now:f64)->LiveView {
+        let now=now.max(self.last_time.unwrap_or(self.job_time));
+        let elapsed=self.start.map(|t|(now-t).max(0.0));
+        let mut view=LiveView{key:format!("{epoch}:{}",self.offset),elapsed,phase:0,phase_elapsed:None,
+            flight:None,completed:self.run.phases.clone(),active_metric:if elapsed.is_some(){"flight"}else{"pending"},
+            shield:None,shield_time:None,leg_time:None,body_time:None,pylon_time:None,legs:0,uncertain:self.run.is_bugged_run};
+        let Some(p)=self.phase.as_ref() else { return view; };
+        let c=&self.clocks;
+        view.phase=p.phase_number as u8;
+        view.phase_elapsed=Some((now-c.phase_start).max(0.0));
+        view.flight=Some(self.run.total_times.total_flight_time);
+        view.legs=p.leg_breaks.len().min(4);
+        let has_shield=p.phase_number!=2;
+        let has_pylon=matches!(p.phase_number,1|3);
+        // Phase 2 has no shield. Once the body is killed, gaps before launch/next
+        // phase are transitions, not leg/body/pylon time.
+        view.active_metric=if c.pylons.is_some() && has_pylon {"pylon"}
+            else if c.body_killed.is_some() {"transition"}
+            else if c.vulnerable.is_some() {"body"}
+            else if view.legs>=4 {"transition"}
+            else if !has_shield || c.shield_closed || view.legs>0 {"leg"}
+            else if c.shield.is_some() {"shield"} else {"transition"};
+        if has_shield {
+            view.shield_time=if view.active_metric=="shield" {
+                c.shield.map(|(d,t)| { view.shield=Some(d);p.total_shield_time+(now-t).max(0.0) })
+            } else if c.shield_closed || view.legs>0 || c.vulnerable.is_some() { Some(p.total_shield_time) } else { None };
+        }
+        if view.active_metric=="leg" {
+            view.leg_time=Some(p.total_leg_time+(now-c.last_leg.unwrap_or(c.phase_start)).max(0.0));
+        } else if view.legs>0 || c.vulnerable.is_some() { view.leg_time=Some(p.total_leg_time); }
+        if let Some(t)=c.vulnerable { view.body_time=Some((c.body_killed.unwrap_or(now)-t).max(0.0)); }
+        if has_pylon { view.pylon_time=c.pylons.map(|t|(now-t).max(0.0)); }
+        view
+    }
+}
+
+pub struct Engine { epoch:Option<i64>, latest_log:Option<f64>, fight:Option<Fight>, local_player:Option<String>, pub warnings:u64 }
 impl Engine {
-    pub fn new()->Self { Self { epoch:None,fight:None,local_player:None,warnings:0 } }
+    pub fn new()->Self { Self { epoch:None,latest_log:None,fight:None,local_player:None,warnings:0 } }
+    pub fn live_clock(&self)->Option<(i64,f64)> { Some((self.epoch?,self.latest_log?)) }
+    pub fn live_view(&self,now:f64)->Option<LiveView> { Some(self.fight.as_ref()?.live(self.epoch?,now)) }
     pub fn active(&self)->bool { self.fight.is_some() }
     pub fn lifecycle(&self)->Option<Lifecycle> { self.fight.as_ref().map(|f|if f.start.is_some(){Lifecycle::Running}else{Lifecycle::Pending}) }
     pub fn snapshot(&self)->Option<Completed> { self.fight.clone()?.complete(self.epoch?,EndReason::Recovery) }
     pub fn reset(&mut self, reason:EndReason)->Option<Completed> {
         let result=self.fight.take().zip(self.epoch).and_then(|(f,epoch)|f.complete(epoch,reason));
         self.epoch=None;
+        self.latest_log=None;
         self.local_player=None;
         result
     }
@@ -200,12 +259,20 @@ impl Engine {
     }
     pub fn line(&mut self,offset:u64,bytes:&[u8])->Option<Completed> {
         let line=match std::str::from_utf8(bytes) { Ok(s)=>s.trim_end_matches(['\r','\n']),Err(_)=>{self.bad_line();return None;} };
+        // Track ordinary timed log lines too, so an active clock can detect stale files
+        // without changing combat state or its last trusted event.
+        if self.epoch.is_some() {
+            if let Ok(t)=events::seconds(line) {
+                self.latest_log=Some(self.latest_log.map_or(t,|old|old.max(t)));
+            }
+        }
         let observation=match events::decode(line) { Ok(Some(e))=>e,Ok(None)=>return None,Err(_)=>{self.bad_line();return None;} };
         match &observation.event {
             Event::Session(epoch)=>{
                 if self.epoch!=Some(*epoch) {
                     let previous=self.reset(EndReason::SessionChanged);
                     self.epoch=Some(*epoch);
+                    self.latest_log=Some(observation.time);
                     return previous;
                 }
                 return None;
@@ -240,6 +307,32 @@ mod tests {
     use crate::events::{HEADER,JOB,EXIT,ABORT,PHASE_MARKERS,SHIELD,LEG,VULNERABLE,PYLONS};
     fn header(e:&mut Engine) { e.line(0,format!("0.376 {HEADER} Sun Nov 22 16:00:48 2026 [UTC: Sun Nov 22 08:00:48 2026]").as_bytes()); }
     fn feed(e:&mut Engine,t:f64,s:&str)->Option<Completed> { e.line((t*1000.0) as u64,format!("{t:.3} {s}").as_bytes()) }
+
+    #[test]
+    fn live_projection_preserves_exact_splits_and_stage_rules() {
+        let mut e=Engine::new();header(&mut e);feed(&mut e,1.0,JOB);
+        assert_eq!(e.live_view(2.0).unwrap().active_metric,"pending");
+        feed(&mut e,10.0,EXIT);
+        assert_eq!(e.live_view(12.0).unwrap().elapsed,Some(2.0));
+        feed(&mut e,20.0,PHASE_MARKERS[0]);
+        feed(&mut e,21.0,&format!("{SHIELD} DT_FIRE"));
+        let v=e.live_view(23.0).unwrap();assert_eq!(v.active_metric,"shield");assert_eq!(v.shield,Some(Damage::Heat));assert_eq!(v.shield_time,Some(3.0));
+        feed(&mut e,24.0,"ResourceLoader DBntyFourInterPrTk0920TheBusiness");
+        let v=e.live_view(25.0).unwrap();assert_eq!(v.active_metric,"leg");assert_eq!(v.shield_time,Some(4.0));assert_eq!(v.leg_time,Some(1.0));
+        feed(&mut e,26.0,&format!("{LEG}: ARM_RIGHT"));
+        feed(&mut e,27.0,VULNERABLE);
+        feed(&mut e,28.0,"CamperHeistOrbFight.lua: Landscape - New State: 3");
+        assert_eq!(e.live_view(29.0).unwrap().active_metric,"transition");
+        feed(&mut e,30.0,PYLONS);
+        assert_eq!(e.live_view(32.0).unwrap().pylon_time,Some(2.0));
+        feed(&mut e,35.0,PHASE_MARKERS[1]);
+        let v=e.live_view(36.0).unwrap();assert_eq!(v.phase,2);assert_eq!(v.active_metric,"leg");
+        assert_eq!(v.shield_time,None);assert_eq!(v.pylon_time,None);assert_eq!(v.completed[0].total_time,15.0);
+        feed(&mut e,37.0,"ordinary diagnostic");assert_eq!(e.live_clock().unwrap().1,37.0);
+        // Viewing ahead must not alter the final recorded times.
+        assert_eq!(e.live_view(100.0).unwrap().elapsed,Some(90.0));
+        let r=feed(&mut e,40.0,ABORT).unwrap();assert_eq!(r.run.elapsed_seconds,Some(30.0));assert!(e.live_view(41.0).is_none());
+    }
     #[test]
     fn full_four_phase_replay() {
         let mut e=Engine::new();header(&mut e);
