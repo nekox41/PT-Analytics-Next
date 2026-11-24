@@ -15,8 +15,9 @@
 
 Aameow&ChatGPT 开发的高性能、稳定且可靠的大蜘蛛竞速工具，基于 Tauri2。。
 
+<div align="center">
 [下载最新 Windows 版本](https://github.com/nekox41/PT-Analytics-Next/releases/latest) · [构建状态](https://github.com/nekox41/PT-Analytics-Next/actions)
-
+</div>
 ## 功能
 
 - 自动读取日志分析大蜘蛛任务用时。
