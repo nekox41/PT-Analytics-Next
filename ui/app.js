@@ -19,6 +19,8 @@ pylon:'<circle cx="12" cy="5" r="3"/><circle cx="5" cy="17" r="3"/><circle cx="1
 edit:'<path d="m4 16 12-12 4 4L8 20H4zM14 6l4 4"/>',trash:'<path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/>',
 eye:'<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
 star:'<path d="m12 2 3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/>',
+copy:'<rect x="8" y="8" width="12" height="13" rx="1.5"/><path d="M16 8V3H3v13h5"/>',
+document:'<path d="M6 3h8l5 5v13H6zM14 3v6h5M9 13h7M9 17h7"/>',
 share:'<circle cx="5" cy="12" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="m7 11 10-5M7 13l10 5"/>'
 };
 const icon=k=>'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">'+(icons[k]||icons.clock)+'</svg>';
@@ -85,19 +87,44 @@ function render(){
 }
 function metricCards(t,average=false,pb=false,partial=false,lowerBound=false){return '<div class="metric-grid">'+metrics.map(([key,label,k,color],i)=>'<article class="metric"><div class="metric-top"><span class="metric-icon" style="background:'+color+'">'+icon(k)+'</span><span>'+label+(average?"<br>平均值":partial&&i!==0?"<br>已记录":"")+'</span></div><div class="metric-value '+(average?"avg "+(i%2?"alt":""):i===0&&pb?"pb":"")+'">'+(i===0&&lowerBound&&Number.isFinite(t[key])?'≥ ':'')+fmt(t[key])+(Number.isFinite(t[key])?'<small>s</small>':'')+'</div></article>').join("")+'</div>'}
 function empty(k,title,desc){return '<div class="empty">'+icon(k)+'<h2>'+esc(title)+'</h2><p>'+esc(desc)+'</p><button class="primary" data-action="refresh">刷新记录</button></div>'}
+function previousRun(r){
+ const index=state.runs.findIndex(x=>x.run_id===r.run_id);
+ return index>=0?state.runs.slice(index+1).find(Report.eligible):null;
+}
+function isPB(r){return Report.eligible(r)&&!valid().some(x=>x.total_times.total_time<r.total_times.total_time);}
+function reportMetrics(r){
+ return '<div class="metric-grid report-metrics">'+Report.metricValues(r,previousRun(r)).map((m,i)=>
+ '<article class="metric"><div class="metric-top"><span class="metric-icon" style="background:'+m.color+'">'+icon("clock")+'</span><span>'+m.label+'</span></div><div class="metric-value '+(i===0&&isPB(r)?"pb":"")+'">'+(m.lower&&Number.isFinite(m.value)?"≥ ":"")+fmt(m.value)+(Number.isFinite(m.value)?'<small>s</small>':'')+'</div><div class="metric-delta '+(m.delta<0?"faster":m.delta>0?"slower":"muted")+'" title="相对于上一场有效任务的变化">'+Report.deltaText(m.delta)+'</div></article>').join("")+'</div>';
+}
+function phaseCards(r){
+ return '<div class="phase-grid '+(state.single?"single":"")+'">'+Report.phases(r).map(p=>{
+ if(p.missing)return '<article class="phase"><div class="phase-head"><span>'+p.name+'</span><strong>—</strong></div><span class="muted">无阶段数据</span></article>';
+ return '<article class="phase"><div class="phase-head"><span>'+p.name+(p.complete?"":' <span class="warn">未完成</span>')+'</span><span class="phase-duration">'+fmt(p.duration)+'s / <strong>'+fmt(p.cumulative)+'s</strong></span></div><div class="phase-details">'+p.rows.map(row=>
+ '<div class="phase-detail-row"><div class="phase-detail-summary"><span>'+row.cn+'</span><span>'+fmt(row.value)+'</span></div><div class="split-row">'+row.splits.map(s=>'<span class="split" title="'+esc(s.type==="shield"?shieldNames[s.name]||s.name:s.name)+'"><b class="'+(s.type==="shield"?'damage-glyph':'')+'">'+esc(s.symbol)+'</b>'+fmt(s.time)+'</span>').join("")+'</div></div>').join("")+'</div></article>';
+ }).join("")+'</div>';
+}
 function renderHome(){
  const r=selected();if(!r){$("content").innerHTML=empty("clock","暂无任务记录","启动 Warframe 并完成利润收割者任务。软件将自动读取 EE.log，也可在设置中指定日志文件。");return}
- const best=valid().reduce((best,x)=>Math.min(best,x.total_times.total_time),Infinity);
- let cumulative=r.total_times.total_flight_time;
- $("content").innerHTML='<div class="run-title"><span class="name">你的任务「'+esc(r.run_name)+'」</span>'+btn("edit","重命名","rename:"+r.run_id)+btn("share","复制任务结果","share:"+r.run_id)+btn("star",r.favorite?"取消收藏":"收藏","favorite:"+r.run_id,r.favorite?'style="color:#ffbe5a"':"")+(lifecycle(r)!=="completed"?'<span class="warn" title="'+esc(reasonText(r))+'">'+esc(statusText(r))+'</span>':"")+'</div>'+roster(r)+metricCards({...r.total_times,total_time:elapsed(r)??NaN},false,lifecycle(r)==="completed"&&r.total_times.total_time===best,lifecycle(r)!=="completed",lifecycle(r)==="interrupted")+(lifecycle(r)!=="completed"?'<p class="muted">'+esc(reasonText(r))+(lifecycle(r)==="interrupted"?" · 总耗时为最后可信战斗事件的下限":"")+(elapsed(r)==null?" · 缺少计时起点或旧记录耗时不完整":" · 分项仅包含已确认事件")+"</p>":"")+'<div class="phase-grid '+(state.single?"single":"")+'">'+Array.from({length:4},(_,i)=>{
- const p=r.phases.find(x=>x.phase_number===i+1);
- if(!p)return '<article class="phase"><div class="phase-head">'+phaseNames[i]+'<strong>—</strong></div><span class="muted">无阶段数据</span></article>';
- cumulative+=p.total_time;
- const rows=[["护盾",p.total_shield_time],["腿部",p.total_leg_time],["本体",p.total_body_kill_time],["信标",p.total_pylon_time]];
- const shields=p.shield_changes.map(x=>'<span class="split"><b>'+esc(shieldNames[x.status_effect]||x.status_effect)+'</b>'+fmt(x.shield_time)+'</span>').join("");
- const leg=p.leg_breaks.map(x=>'<span class="split"><b>'+esc(legs[x.leg_position]||x.leg_position)+'</b>'+fmt(x.leg_break_time)+'</span>').join("");
- return '<article class="phase"><div class="phase-head">'+phaseNames[i]+(p.complete===false?' <span class="warn">未完成</span>':'')+'<strong>'+fmt(cumulative)+'s</strong></div><div class="phase-body"><div class="phase-summary">'+rows.map(([label,v])=>'<span>'+label+'</span><span>'+(p.complete===false&&v===0?'—':fmt(v))+'</span>').join("")+'</div><div class="splits"><div class="split-row">'+shields+'</div><div class="split-row">'+leg+'</div></div></div></article>';
- }).join("")+'</div>';
+ $("content").innerHTML='<div class="run-title"><span class="name">你的任务「'+esc(r.run_name)+'」</span>'+btn("edit","重命名","rename:"+r.run_id)+btn("copy","复制成绩图片","copy-image:"+r.run_id)+btn("document","复制英文文本战报","copy-text:"+r.run_id)+btn("star",r.favorite?"取消收藏":"收藏","favorite:"+r.run_id,r.favorite?'style="color:#ffbe5a"':"")+(lifecycle(r)!=="completed"?'<span class="warn" title="'+esc(reasonText(r))+'">'+esc(statusText(r))+'</span>':isPB(r)?'<span class="pb-label">最佳成绩！</span>':"")+'</div>'+roster(r)+(lifecycle(r)!=="completed"?'<p class="muted">'+esc(reasonText(r))+(lifecycle(r)==="interrupted"?" · 总耗时为最后可信战斗事件的下限":"")+(elapsed(r)==null?" · 缺少计时起点或旧记录耗时不完整":" · 分项仅包含已确认事件")+"</p>":"")+'<section id="result-cards">'+reportMetrics(r)+phaseCards(r)+'</section>';
+}
+async function copyText(r){
+ const text=Report.text(r);
+ try{await invoke("copy_report_text",{text});}
+ catch(nativeError){if(!navigator.clipboard?.writeText)throw nativeError;await navigator.clipboard.writeText(text);}
+ toast("已复制英文文本战报");
+}
+async function copyImage(r){
+ const canvas=Report.canvas(r,{light:state.light,pb:isPB(r),previous:previousRun(r),single:state.single});
+ const data=canvas.toDataURL("image/png");
+ if(!data.startsWith("data:image/png;base64,"))throw new Error("图片生成失败");
+ try{await invoke("copy_report_image",{png:data.slice("data:image/png;base64,".length)});}
+ catch(nativeError){
+  if(!navigator.clipboard?.write||typeof ClipboardItem==="undefined")throw nativeError;
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/png"));
+  if(!blob)throw new Error("图片生成失败");
+  await navigator.clipboard.write([new ClipboardItem({"image/png":blob})]);
+ }
+ toast("已复制成绩图片");
 }
 function filtered(){
  let rows=state.runs.filter(r=>(state.filter==="all"||state.filter==="favorite"&&r.favorite||state.filter==="complete"&&lifecycle(r)==="completed"||state.filter==="aborted"&&lifecycle(r)==="aborted"||state.filter==="interrupted"&&lifecycle(r)==="interrupted"||state.filter==="bugged"&&lifecycle(r)==="invalid")&&(r.run_name.toLowerCase().includes(state.search.toLowerCase())||players(r).some(p=>p.name.toLowerCase().includes(state.search.toLowerCase()))));
@@ -133,7 +160,7 @@ function renderAnalytics(){
  $("chart-limit").value=String(state.chartLimit);$("chart-limit").onchange=e=>{state.chartLimit=Number(e.target.value);renderAnalytics()};
 }
 function renderSettings(){
- $("content").innerHTML='<div class="settings"><article class="settings-card"><h2>常规</h2><div class="setting-row"><div><b>界面主题</b><p>深色 / 浅色</p></div><button class="primary" data-action="theme">'+(state.light?"浅色":"深色")+'</button></div><div class="setting-row"><div><b>阶段布局</b><p>双列卡片或单列卡片</p></div><button data-action="layout">'+(state.single?"单列":"双列")+'</button></div></article><article class="settings-card"><h2>日志监听</h2><p class="muted">默认读取 Windows 用户目录下的 Warframe / EE.log，启动时回放历史记录，随后持续监听。</p><div class="path-control"><input id="log-path" placeholder="EE.log 的绝对路径" value="'+esc(state.status.path||"")+'"><button class="primary" data-action="save-path">保存</button><button data-action="reset-path">恢复默认</button></div><div class="setting-row"><span>连接状态</span><b id="setting-status"></b></div><div class="setting-row"><span>读取位置</span><span id="setting-offset" class="muted"></span></div><div id="setting-error" class="error"></div></article><article class="settings-card"><h2>关于 PT Analytics Next</h2><p>v0.1.4 · Tauri 2 / Rust · GPL-3.0-or-later</p><p class="muted">使用独立 Rust 日志解析核心及 Tauri 前端。所有任务数据仅保存在本地 SQLite 数据库。</p><p class="muted">非 Warframe 官方应用。</p></article></div>';
+ $("content").innerHTML='<div class="settings"><article class="settings-card"><h2>常规</h2><div class="setting-row"><div><b>界面主题</b><p>深色 / 浅色</p></div><button class="primary" data-action="theme">'+(state.light?"浅色":"深色")+'</button></div><div class="setting-row"><div><b>阶段布局</b><p>双列卡片或单列卡片</p></div><button data-action="layout">'+(state.single?"单列":"双列")+'</button></div></article><article class="settings-card"><h2>日志监听</h2><p class="muted">默认读取 Windows 用户目录下的 Warframe / EE.log，启动时回放历史记录，随后持续监听。</p><div class="path-control"><input id="log-path" placeholder="EE.log 的绝对路径" value="'+esc(state.status.path||"")+'"><button class="primary" data-action="save-path">保存</button><button data-action="reset-path">恢复默认</button></div><div class="setting-row"><span>连接状态</span><b id="setting-status"></b></div><div class="setting-row"><span>读取位置</span><span id="setting-offset" class="muted"></span></div><div id="setting-error" class="error"></div></article><article class="settings-card"><h2>关于 PT Analytics Next</h2><p>v0.1.5 · Tauri 2 / Rust · GPL-3.0-or-later</p><p class="muted">使用独立 Rust 日志解析核心及 Tauri 前端。所有任务数据仅保存在本地 SQLite 数据库。</p><p class="muted">非 Warframe 官方应用。</p></article></div>';
 }
 function openDialog(title,description,value,action){$("dialog-title").textContent=title;$("dialog-description").textContent=description;$("dialog-input").hidden=value===null;$("dialog-input").value=value??"";dialogAction=action;$("edit").showModal();if(value!==null){$("dialog-input").focus();$("dialog-input").select()}}
 $("dialog-cancel").onclick=()=>$("edit").close();
@@ -152,7 +179,8 @@ async function action(a){
  if(cmd==="delete"&&r){openDialog("删除任务","确认删除「"+r.run_name+"」？删除后不会重新导入。",null,()=>invoke("delete_run",{id}));return}
  if(cmd==="delete-selected"){const ids=[...state.chosen];openDialog("删除任务","确认删除 "+ids.length+" 条任务记录？",null,async()=>{for(const id of ids)await invoke("delete_run",{id});state.chosen.clear()});return}
  if(cmd==="favorite"&&r){await invoke("favorite_run",{id});await refresh(true);return}
- if(cmd==="share"&&r){const text=r.run_name+" · "+statusText(r)+"\n"+"玩家："+(players(r).map(p=>p.name+(p.self?"（自己）":"")).join("、")||"未知")+"\n"+metrics.map(([key,label],i)=>label+": "+(i===0?labelTime(r):fmt(r.total_times[key])+"s")).join("\n");try{await navigator.clipboard.writeText(text);toast("已复制任务结果")}catch{openDialog("复制任务结果",text,null,async()=>{})}return}
+ if(cmd==="copy-image"&&r){await copyImage(r);return}
+ if(cmd==="copy-text"&&r){await copyText(r);return}
  if(cmd==="save-path"||cmd==="reset-path"){await invoke("set_log_path",{path:cmd==="reset-path"?"":$("log-path").value});toast("日志路径已保存");await refresh(true);return}
 }
 document.addEventListener("click",e=>{const b=e.target.closest("[data-action]");if(b&&!b.disabled)action(b.dataset.action).catch(err=>toast(String(err)))});

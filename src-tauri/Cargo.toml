@@ -1,6 +1,6 @@
 [package]
 name = "pt-analytics-next"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 license = "GPL-3.0-or-later"
 description = "Resilient local Profit-Taker run analytics"
@@ -14,6 +14,10 @@ chrono = "0.4"
 regex = "1"
 same-file = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
+[target.'cfg(windows)'.dependencies]
+clipboard-win = "5.4"
+base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["png"] }
 [dev-dependencies]
 tempfile = "3"
 [features]

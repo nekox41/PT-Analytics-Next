@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod models; mod events;
-mod engine; mod tail; mod store;
+mod engine; mod tail; mod store; mod clipboard;
 use engine::{Completed, Engine};
 use tail::{Tail, Framer, Line};
 use store::{Store, Record};
@@ -118,6 +118,6 @@ fn main() {
             }
         })?;
         Ok(())
-    }).invoke_handler(tauri::generate_handler![get_status,get_runs,rename_run,favorite_run,delete_run,set_log_path])
+    }).invoke_handler(tauri::generate_handler![get_status,get_runs,rename_run,favorite_run,delete_run,set_log_path,clipboard::copy_report_text,clipboard::copy_report_image])
       .run(tauri::generate_context!()).expect("failed to start PT Analytics Next");
 }

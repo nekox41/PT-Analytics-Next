@@ -26,3 +26,23 @@ dialog{width: min(430px,90vw);background:var(--panel);color:var(--text);border:1
 .players-cell{min-width:140px;max-width:360px;white-space:normal}
 .roster-compact{margin:0;gap:4px}
 .roster-compact .player-chip{padding:3px 6px;font-size:12px}
+
+/* Scorecards use actual phase-specific rows. */
+.report-metrics .metric{min-height:145px;padding:15px 20px 12px}
+.report-metrics .metric-icon{color:#fff;width:40px;height:40px}
+.report-metrics .metric-top{font-size:13px;color:var(--muted);font-weight:500}
+.report-metrics .metric-value{font-size:clamp(20px,2.6vw,32px);margin:16px 0 0 5px;font-weight:700;letter-spacing:-.4px}
+.metric-delta{text-align:right;min-height:18px;font-size:14px;font-variant-numeric:tabular-nums;margin-top:4px}
+.metric-delta.faster{color:#35a866}.metric-delta.slower{color:#e45850}
+:root.light .metric-value.pb{color:#68bd39}
+.pb-label{margin-left:auto;font-size:16px;font-weight:650;color:#b54bda;white-space:nowrap}
+.phase{min-height:160px;padding:15px 20px 19px}
+.phase-head{color:var(--muted);font-weight:500;gap:8px}
+.phase-duration{white-space:nowrap;font-size:15px;font-variant-numeric:tabular-nums}
+.phase-head strong{color:var(--text);font-size:20px;font-weight:700}
+.phase-detail-row{display:grid;grid-template-columns:165px minmax(0,1fr);align-items:start}
+.phase-detail-summary{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;border-right:1px solid var(--muted);padding-right:14px;min-height:23px;font-size:15px;height:100%}
+.phase-detail-summary span:last-child{font-family:Consolas,monospace;color:var(--muted);font-variant-numeric:tabular-nums}
+.phase-detail-row .split-row{min-height:23px;padding:3px 0 3px 14px;gap:5px 15px;align-items:center}
+.damage-glyph{font-family:"Segoe UI Symbol","Microsoft YaHei UI",sans-serif!important;font-size:14px!important;min-width:12px;text-align:center}
+@media(max-width:1150px){.report-metrics .metric{padding:13px 12px;min-height:124px}.report-metrics .metric-icon{width:32px;height:32px}.report-metrics .metric-value{margin-left:0}.phase-detail-row{grid-template-columns:115px minmax(0,1fr)}.phase-detail-row .split-row{gap:4px 9px;padding-left:9px}.phase-detail-summary{padding-right:8px}.phase{padding:14px}}
