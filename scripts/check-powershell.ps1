@@ -16,4 +16,5 @@ foreach ($file in (Get-ChildItem -LiteralPath $PSScriptRoot -Filter '*.ps1' -Fil
     }
 }
 if ($failed) { exit 1 }
+& (Join-Path $PSScriptRoot 'test-checksums.ps1')
 exit 0

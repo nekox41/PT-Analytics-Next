@@ -2,6 +2,7 @@
 param([switch]$Bootstrap)
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
+. (Join-Path $PSScriptRoot 'checksums.ps1')
 function Run([string]$Exe, [string[]]$Arguments) {
     & $Exe @Arguments
     if ($LASTEXITCODE -ne 0) { throw "$Exe exited with code $LASTEXITCODE" }
@@ -26,6 +27,16 @@ function Fetch([string]$Url,[string]$Path) {
 }
 function Verify-Sha256([string]$Path,[string]$Expected) {
     if ($Expected -notmatch '^[0-9a-fA-F]{64}$' -or (Get-FileHash $Path -Algorithm SHA256).Hash -ne $Expected) { throw "SHA256 verification failed: $Path" }
+}
+# Reuse an existing download only if it matches the freshly downloaded official hash.
+function Fetch-Verified([string]$Url,[string]$Path,[string]$Expected) {
+    if ($Expected -notmatch '^[0-9a-fA-F]{64}$') { throw 'Invalid expected SHA256.' }
+    if ((Test-Path -LiteralPath $Path -PathType Leaf) -and (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash -eq $Expected) {
+        Write-Host "Reusing verified download: $Path"
+        return
+    }
+    Fetch $Url $Path
+    Verify-Sha256 $Path $Expected
 }
 function Verify-Signature([string]$Path,[string]$Publisher) {
     $sig=Get-AuthenticodeSignature -FilePath $Path
@@ -58,13 +69,12 @@ function Install-Direct([string]$Id) {
         'OpenJS.NodeJS.LTS' {
             # Use the current Node 22 LTS x64 ZIP from the official release directory.
             $url='https://nodejs.org/dist/latest-v22.x'
-            $checks=(Invoke-WebRequest -UseBasicParsing -Uri "$url/SHASUMS256.txt" -TimeoutSec 60).Content
-            $match=[regex]::Match($checks,'(?m)^([a-fA-F0-9]{64})\s+\*?(node-v22\.\d+\.\d+-win-x64\.zip)\s*$')
-            if (-not $match.Success) { throw 'Node.js x64 ZIP not found in official checksum manifest.' }
+            $checksumFile=Join-Path $downloads 'node-SHASUMS256.txt'
+            Fetch "$url/SHASUMS256.txt" $checksumFile
+            $match=Get-NodeZipMatch (Read-ChecksumText $checksumFile)
             $name=$match.Groups[2].Value
             $zip=Join-Path $downloads $name
-            Fetch "$url/$name" $zip
-            Verify-Sha256 $zip $match.Groups[1].Value
+            Fetch-Verified "$url/$name" $zip $match.Groups[1].Value
             $unpack=Join-Path $downloads ([guid]::NewGuid().ToString())
             Expand-Archive -LiteralPath $zip -DestinationPath $unpack
             $src=Join-Path $unpack ([IO.Path]::GetFileNameWithoutExtension($name))
@@ -83,9 +93,10 @@ function Install-Direct([string]$Id) {
         'Rustlang.Rustup' {
             $url='https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe'
             $exe=Join-Path $downloads 'rustup-init.exe'
-            Fetch $url $exe
-            $sum=(Invoke-WebRequest -UseBasicParsing -Uri "$url.sha256" -TimeoutSec 60).Content
-            Verify-Sha256 $exe (($sum.Trim() -split '\s+')[0])
+            $checksumFile=Join-Path $downloads 'rustup-init.exe.sha256'
+            Fetch "$url.sha256" $checksumFile
+            $sum=Get-RustupSha256 (Read-ChecksumText $checksumFile)
+            Fetch-Verified $url $exe $sum
             Run $exe @('-y','--default-host','x86_64-pc-windows-msvc','--profile','minimal','--default-toolchain','stable')
         }
         'Microsoft.VisualStudio.2022.BuildTools' {
