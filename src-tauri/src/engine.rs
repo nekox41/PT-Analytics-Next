@@ -32,6 +32,19 @@ impl Fight {
     fn new(offset: u64, job_time: f64) -> Self {
         Self { offset, job_time, run: Run::new(), start:None, last_time:None, phase:None, clocks:SplitClock::default(), initial_shield:None }
     }
+    fn set_self(&mut self,name:&str) {
+        self.run.player_name=name.to_owned();
+        self.run.self_verified=true;
+        self.run.squad_members.retain(|m|!m.member_name.eq_ignore_ascii_case(name));
+        self.run.is_solo_run=self.run.squad_members.is_empty();
+    }
+    fn add_member(&mut self,name:String) {
+        if self.run.self_verified && name.eq_ignore_ascii_case(&self.run.player_name) { return; }
+        if !self.run.squad_members.iter().any(|m|m.member_name.eq_ignore_ascii_case(&name)) {
+            self.run.squad_members.push(SquadMember{member_name:name});
+        }
+        self.run.is_solo_run=self.run.self_verified && self.run.squad_members.is_empty();
+    }
     fn mark(&mut self) { self.run.is_bugged_run=true; }
     fn close_shield(&mut self,t:f64) {
         if self.phase.is_none() || self.clocks.shield_closed { return; }
@@ -103,16 +116,8 @@ impl Fight {
         let t=obs.time;
         // Squad/name messages do not advance the combat clock.
         match obs.event {
-            Event::Player(name)=>{
-                if self.run.player_name.is_empty() { self.run.player_name=name; }
-                self.run.squad_members.retain(|m|m.member_name!=self.run.player_name);
-                self.run.is_solo_run=self.run.squad_members.is_empty(); return None;
-            }
-            Event::Member(name)=>{
-                if name!=self.run.player_name && self.run.squad_members.len()<3 && !self.run.squad_members.iter().any(|m|m.member_name==name) {
-                    self.run.squad_members.push(SquadMember{member_name:name}); self.run.is_solo_run=false;
-                } return None;
-            }
+            Event::LocalPlayer(name)=>{self.set_self(&name);return None;}
+            Event::Member(name)=>{self.add_member(name);return None;}
             Event::Job|Event::Session(_)=>return None,
             _=>{}
         }
@@ -177,15 +182,16 @@ impl Fight {
     }
 }
 
-pub struct Engine { epoch:Option<i64>, fight:Option<Fight>, pub warnings:u64 }
+pub struct Engine { epoch:Option<i64>, fight:Option<Fight>, local_player:Option<String>, pub warnings:u64 }
 impl Engine {
-    pub fn new()->Self { Self { epoch:None,fight:None,warnings:0 } }
+    pub fn new()->Self { Self { epoch:None,fight:None,local_player:None,warnings:0 } }
     pub fn active(&self)->bool { self.fight.is_some() }
     pub fn lifecycle(&self)->Option<Lifecycle> { self.fight.as_ref().map(|f|if f.start.is_some(){Lifecycle::Running}else{Lifecycle::Pending}) }
     pub fn snapshot(&self)->Option<Completed> { self.fight.clone()?.complete(self.epoch?,EndReason::Recovery) }
     pub fn reset(&mut self, reason:EndReason)->Option<Completed> {
         let result=self.fight.take().zip(self.epoch).and_then(|(f,epoch)|f.complete(epoch,reason));
         self.epoch=None;
+        self.local_player=None;
         result
     }
     pub fn bad_line(&mut self) {
@@ -204,8 +210,17 @@ impl Engine {
                 }
                 return None;
             }
+            Event::LocalPlayer(name)=>{
+                self.local_player=Some(name.clone());
+                if let Some(f)=&mut self.fight { f.set_self(name); }
+                return None;
+            }
             Event::Job=>{
-                if self.fight.is_none() { self.fight=Some(Fight::new(offset,observation.time)); }
+                if self.fight.is_none() {
+                    let mut fight=Fight::new(offset,observation.time);
+                    if let Some(name)=&self.local_player { fight.set_self(name); }
+                    self.fight=Some(fight);
+                }
                 return None;
             }
             _=>{}
@@ -284,6 +299,43 @@ mod tests {
         assert_eq!(r.run.lifecycle,Some(Lifecycle::Interrupted));
     }
     #[test]
+    fn multiplayer_roster_self_is_not_first_arbitration_name() {
+        let mut e=Engine::new();header(&mut e);
+        feed(&mut e,1.0,"Sys [Info]: Logged in LocalTester");
+        feed(&mut e,2.0,"Game [Info]: UnrelatedTownPlayer loadout loader finished.");
+        feed(&mut e,3.0,JOB);
+        feed(&mut e,4.0,"Net [Info]: name: RemoteHost\u{e000}, id=0");
+        feed(&mut e,4.1,"Net [Info]: name: LocalTester\u{e000}, id=1");
+        feed(&mut e,4.2,"Game [Info]: RemoteHost\u{e000} loadout loader finished.");
+        feed(&mut e,4.3,"Game [Info]: SecondPlayer\u{e002} loadout loader finished.");
+        feed(&mut e,4.4,"Net [Info]: name: secondplayer, id=2");
+        feed(&mut e,4.5,"Game [Info]: ThirdPlayer loadout loader finished.");
+        feed(&mut e,5.0,EXIT);
+        feed(&mut e,6.0,"Game [Info]: LateReplacement loadout loader finished.");
+        let r=feed(&mut e,8.0,ABORT).unwrap().run;
+        assert!(r.self_verified);assert_eq!(r.player_name,"LocalTester");assert!(!r.is_solo_run);
+        assert_eq!(r.squad_members.iter().map(|m|m.member_name.as_str()).collect::<Vec<_>>(),vec!["RemoteHost","SecondPlayer","ThirdPlayer","LateReplacement"]);
+        assert_eq!(r.elapsed_seconds,Some(3.0));
+        feed(&mut e,9.0,JOB);feed(&mut e,10.0,EXIT);
+        let next=feed(&mut e,11.0,ABORT).unwrap().run;
+        assert!(next.is_solo_run);assert!(next.self_verified);assert_eq!(next.player_name,"LocalTester");
+        assert!(next.squad_members.is_empty());
+    }
+    #[test]
+    fn no_identity_evidence_never_labels_peer_as_self() {
+        let mut e=Engine::new();header(&mut e);feed(&mut e,1.0,JOB);
+        feed(&mut e,2.0,"Net [Info]: name: RemoteHost, id=0");feed(&mut e,3.0,EXIT);
+        let r=feed(&mut e,4.0,ABORT).unwrap().run;
+        assert!(!r.self_verified);assert!(r.player_name.is_empty());assert!(!r.is_solo_run);
+        assert_eq!(r.squad_members[0].member_name,"RemoteHost");
+        feed(&mut e,5.0,JOB);feed(&mut e,6.0,"Net [Info]: name: LocalTester, id=0");
+        feed(&mut e,7.0,"Sys [Info]: Logged in LocalTester");
+        let r=feed(&mut e,8.0,ABORT).unwrap().run;
+        assert!(r.self_verified);assert!(r.is_solo_run);assert!(r.squad_members.is_empty());
+        e.reset(EndReason::LogReset);header(&mut e);feed(&mut e,1.0,JOB);
+        assert!(!e.snapshot().unwrap().run.self_verified);
+    }
+    #[test]
     fn captured_two_run_regression() {
         use crate::tail::{Framer,Line};
         // Minimal anonymized event fixture from a real EE.log; no unrelated player/system data.
@@ -297,6 +349,7 @@ mod tests {
             }
             assert_eq!(e.warnings,0,"valid multiline job blocks must not be errors");
             assert_eq!(runs.len(),2);
+            for item in &runs { assert_eq!(item.run.player_name,"LocalTester"); assert!(item.run.self_verified); assert!(item.run.is_solo_run); assert!(item.run.squad_members.is_empty()); }
             assert_eq!(runs[0].run.lifecycle,Some(Lifecycle::Aborted));
             assert_eq!(runs[0].run.elapsed_seconds,None);
             let r=&runs[1].run;

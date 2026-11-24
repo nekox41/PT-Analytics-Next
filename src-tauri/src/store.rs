@@ -21,6 +21,10 @@ impl Store {
         let json = serde_json::to_string(&item.run).map_err(err)?;
         self.conn.execute("INSERT INTO runs(source_key,stamp,payload) VALUES (?1,?2,?3) ON CONFLICT(source_key) DO UPDATE SET stamp=excluded.stamp,payload=excluded.payload WHERE runs.deleted=0 AND ((json_extract(runs.payload, '$.lifecycle')='interrupted' AND (json_extract(excluded.payload, '$.lifecycle') IN ('completed','aborted','invalid') OR coalesce(json_extract(excluded.payload, '$.elapsed_seconds'),-1)>coalesce(json_extract(runs.payload, '$.elapsed_seconds'),-1))) OR (json_extract(runs.payload, '$.lifecycle') IS NULL AND json_extract(runs.payload, '$.is_aborted_run')=1 AND json_extract(excluded.payload, '$.lifecycle')='aborted' AND json_extract(excluded.payload, '$.elapsed_seconds') IS NOT NULL))",
             params![item.key, item.run.time_stamp, json]).map_err(err)?;
+        // Replay upgrades roster metadata only. Timings, favorites, tombstones and custom names stay unchanged.
+        if item.run.roster_version>0 && (item.run.self_verified || !item.run.squad_members.is_empty()) {
+            self.conn.execute("UPDATE runs SET payload=json_set(payload,'$.player_name',json_extract(?1,'$.player_name'),'$.self_verified',json(?2),'$.is_solo_run',json(?3),'$.squad_members',json_extract(?1,'$.squad_members'),'$.roster_version',json_extract(?1,'$.roster_version')) WHERE source_key=?4 AND deleted=0 AND coalesce(json_extract(payload,'$.roster_version'),0)<json_extract(?1,'$.roster_version')",params![json,if item.run.self_verified {"true"}else{"false"},if item.run.is_solo_run {"true"}else{"false"},item.key]).map_err(err)?;
+        }
         Ok(())
     }
     pub fn list(&self) -> Result<Vec<Record>, String> {
@@ -96,6 +100,20 @@ mod tests {
         assert_eq!(s.list().unwrap()[0].run.lifecycle,Some(Lifecycle::Interrupted));
         item.run.lifecycle=Some(Lifecycle::Completed);item.run.elapsed_seconds=Some(30.0);
         s.insert(&item).unwrap();assert_eq!(s.list().unwrap().len(),1);assert_eq!(s.list().unwrap()[0].run.lifecycle,Some(Lifecycle::Completed));
+    }
+    #[test]
+    fn replay_enriches_legacy_roster_without_touching_times_or_custom_name() {
+        let s=Store::open(Path::new(":memory:")).unwrap();
+        let mut old=Completed{key:"session:1".into(),run:Run::new()};
+        old.run.roster_version=0;old.run.player_name="WrongFirstPeer".into();old.run.total_times.total_time=93.882;
+        s.insert(&old).unwrap();let id=s.list().unwrap()[0].run.run_id;
+        s.rename(id,"My PB").unwrap();s.favorite(id).unwrap();
+        let mut new=old.clone();new.run.roster_version=1;new.run.self_verified=true;new.run.player_name="LocalTester".into();
+        new.run.squad_members=vec![crate::models::SquadMember{member_name:"RemoteHost".into()}];new.run.total_times.total_time=99.0;
+        s.insert(&new).unwrap();let records=s.list().unwrap();assert_eq!(records.len(),1);
+        let r=&records[0];assert_eq!(r.run.run_id,id);assert_eq!(r.run.run_name,"My PB");assert!(r.favorite);
+        assert_eq!(r.run.total_times.total_time,93.882);assert!(r.run.self_verified);assert_eq!(r.run.player_name,"LocalTester");assert_eq!(r.run.squad_members[0].member_name,"RemoteHost");
+        s.delete(id).unwrap();s.insert(&new).unwrap();assert!(s.list().unwrap().is_empty());
     }
     #[test]
     fn replay_and_delete_do_not_duplicate() {

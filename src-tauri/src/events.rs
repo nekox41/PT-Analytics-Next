@@ -24,7 +24,7 @@ pub const PYLONS: &str = "Pylon launch complete";
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event {
     Session(i64), Job, Elevator, Phase(u8), Shield(Damage), ShieldDone,
-    Leg(Leg), Vulnerable, BodyKilled, Pylons, Abort, ReturnToTown, Player(String), Member(String),
+    Leg(Leg), Vulnerable, BodyKilled, Pylons, Abort, ReturnToTown, LocalPlayer(String), Member(String),
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct Observation { pub time: f64, pub event: Event }
@@ -60,7 +60,7 @@ fn leg(s: &str) -> Option<Leg> {
     })
 }
 fn clean_name(s: &str) -> Option<String> {
-    let s = s.split(['\u{e000}', '\u{e002}']).next()?.trim();
+    let s = s.split(['\u{e000}', '\u{e002}']).next()?.trim().trim_end_matches(',');
     if s.is_empty() || s.chars().count() > 128 { None } else { Some(s.to_owned()) }
 }
 pub fn decode(line: &str) -> Result<Option<Observation>, &'static str> {
@@ -85,10 +85,16 @@ pub fn decode(line: &str) -> Result<Option<Observation>, &'static str> {
             Some(3|5|6) => Event::BodyKilled, Some(_) => return Ok(None), None => return Err("invalid body state"),
         }
     } else if line.contains(PYLONS) { Event::Pylons }
-    else if let Some((_, rest)) = line.split_once("Net [Info]: name: ") {
-        Event::Player(rest.split_whitespace().next().and_then(clean_name).ok_or("invalid player name")?)
-    } else if line.contains("loadout loader finished.") {
-        Event::Member(line.split_whitespace().nth(3).and_then(clean_name).ok_or("invalid member name")?)
+    else if let Some((_, rest)) = line.split_once("Sys [Info]: Logged in ").or_else(||line.split_once("Sys [Info]: Player name changed to ")) {
+        let Some(name)=rest.split_whitespace().next().and_then(clean_name) else { return Ok(None); };
+        Event::LocalPlayer(name)
+    } else if let Some((_, rest)) = line.split_once("Net [Info]: name: ") {
+        let Some(name)=rest.split_whitespace().next().and_then(clean_name) else { return Ok(None); };
+        Event::Member(name)
+    } else if let Some((_,rest))=line.split_once("Game [Info]: ") {
+        let Some((name,_))=rest.split_once(" loadout loader finished.") else { return Ok(None); };
+        let Some(name)=clean_name(name) else { return Ok(None); };
+        Event::Member(name)
     } else { return Ok(None); };
     Ok(Some(Observation { time: seconds(line)?, event }))
 }
@@ -105,6 +111,17 @@ mod tests {
         assert!(decode("1.0 SwitchShieldVulnerability DT_FUTURE").is_err());
         assert!(decode("1.0 Leg freshly destroyed at part: LEG_LEFT").unwrap().is_some());
         assert!(decode("NaN Orb Fight - Starting first attack Orb phase").is_err());
+    }
+    #[test]
+    fn local_identity_and_arbitration_are_distinct() {
+        let lines=[
+            ("37.895 Sys [Info]: Logged in LocalTester",Event::LocalPlayer("LocalTester".into())),
+            ("42.213 Sys [Info]: Player name changed to LocalTester\u{e000} Clan: Example",Event::LocalPlayer("LocalTester".into())),
+            ("94.787 Net [Info]: name: RemoteHost\u{e000}, id=0",Event::Member("RemoteHost".into())),
+            ("94.863 Game [Info]: RemoteHost\u{e002} loadout loader finished.",Event::Member("RemoteHost".into())),
+            ("94.864 Net [Info]: name: LocalTester, id=1",Event::Member("LocalTester".into())),
+        ];
+        for (line, expected) in lines { assert_eq!(decode(line).unwrap().unwrap().event,expected); }
     }
     #[test]
     fn utc_clock_ignores_machine_timezone() {

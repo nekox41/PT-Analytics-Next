@@ -1,8 +1,12 @@
 0.384 Sys [Diag]: Current time: Tue Nov 24 12:14:52 2026 [UTC: Tue Nov 24 04:14:52 2026]
+37.895 Sys [Info]: Logged in LocalTester
+42.213 Sys [Info]: Player name changed to LocalTester Clan: Example
 80.779 Script [Info]: ThemedSquadOverlay.lua: Active jobId set to /Lotus/Types/Gameplay/Venus/Jobs/Heists/HeistProfitTakerBountyFour_-6_SolarisUnitedHub1_test_EudicoHeists
     jobId=/Lotus/Types/Gameplay/Venus/Jobs/Heists/HeistProfitTakerBountyFour_-6_SolarisUnitedHub1_test_EudicoHeists
     jobTier=-6
 94.736 Game [Info]: SetReturnToLobbyLevelArgs: /Lotus/Levels/Proc/TheNewWar/PartTwo/PostWarFortuna/DgA.lp
+94.787 Net [Info]: name: LocalTester, id=0
+94.863 Game [Info]: LocalTester loadout loader finished.
 95.020 Script [Info]: EidolonMissions.lua: EidolonMissions.lua - ActiveJob is /Lotus/Types/Gameplay/Venus/Jobs/Heists/HeistProfitTakerBountyFour
 99.690 Game [Info]: SetReturnToLobbyLevelArgs: /Lotus/Levels/Proc/TheNewWar/PartTwo/PostWarFortuna
 99.691 Script [Info]: TopMenu.lua: Abort: host/no session
@@ -11,6 +15,8 @@
     jobId=/Lotus/Types/Gameplay/Venus/Jobs/Heists/HeistProfitTakerBountyFour_-6_SolarisUnitedHub1_test_EudicoHeists
     jobTier=-6
 152.875 Game [Info]: SetReturnToLobbyLevelArgs: /Lotus/Levels/Proc/TheNewWar/PartTwo/PostWarFortuna/DgA.lp
+152.889 Net [Info]: name: LocalTester, id=0
+152.911 Game [Info]: LocalTester loadout loader finished.
 152.962 Script [Info]: EidolonMissions.lua: EidolonMissions.lua - ActiveJob is /Lotus/Types/Gameplay/Venus/Jobs/Heists/HeistProfitTakerBountyFour
 155.139 Script [Info]: EidolonMP.lua: EIDOLONMP: Avatar left the zone: TennoAvatar94
 164.973 AI [Info]: Camper->SwitchShieldVulnerability() - Switching shield damage vulnerability type to DT_PUNCTURE

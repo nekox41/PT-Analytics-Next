@@ -13,6 +13,10 @@ pub struct Run {
     pub time_stamp: i64,
     pub run_name: String,
     pub player_name: String,
+    #[serde(default)]
+    pub self_verified: bool,
+    #[serde(default)]
+    pub roster_version: u8,
     pub is_bugged_run: bool,
     pub is_aborted_run: bool,
     pub is_solo_run: bool,
@@ -21,7 +25,7 @@ pub struct Run {
     pub squad_members: Vec<SquadMember>,
 }
 impl Run {
-    pub fn new() -> Self { Self { is_solo_run: true, ..Self::default() } }
+    pub fn new() -> Self { Self { roster_version: 1, ..Self::default() } }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all="snake_case")]

@@ -16,3 +16,13 @@ footer{position:fixed;bottom:0;left:0;right:0;height:34px;background:var(--panel
 dialog{width: min(430px,90vw);background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:22px;box-shadow:0 12px 60px #0006}dialog::backdrop{background:#0008}dialog h2{margin:0 0 12px;font-size:20px}dialog input{width:100%;margin:12px 0}dialog p{color:var(--muted);line-height:1.5}.dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}#toast{position:fixed;right:24px;bottom:52px;background:var(--panel);border:1px solid var(--line);padding:12px 18px;border-radius:8px;box-shadow:0 6px 20px #0004;max-width:420px;z-index:4;display:none}#toast.show{display:block}
 @media(max-width:1150px){.metric{padding:13px 12px;min-height:110px}.metric-icon{width:32px;height:32px}.metric-top{font-size:13px;gap:7px}.metric-value{margin-top:12px}.phase-body{grid-template-columns:112px 1fr}.phase{padding:14px}.split-row{gap:4px 9px}}
 @media(max-width:950px){:root{--rail:60px}.metric-grid{grid-template-columns:repeat(3,1fr)}.phase-grid{grid-template-columns:1fr}.metric-value{font-size:28px}header p{font-size:20px}.toolbar{gap:0}.storage-tools{flex-wrap:wrap}main{padding-top:24px}}
+/* Per-run participant roster: compact, wraps without hiding members. */
+.roster{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin:0 0 16px}
+.roster-label{font-size:13px;color:var(--muted);margin-right:4px}
+.player-chip{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:5px 9px;border:1px solid var(--line);border-radius:7px;background:var(--panel);font-size:13px;line-height:1.2}
+.player-name{overflow-wrap:anywhere;white-space:normal;min-width:0}
+.player-self{border-color:var(--blue);color:var(--blue);font-weight:600}
+.self-tag{font-size:10px;border-radius:4px;background:var(--blue);color:var(--bg);padding:2px 4px;white-space:nowrap}
+.players-cell{min-width:140px;max-width:360px;white-space:normal}
+.roster-compact{margin:0;gap:4px}
+.roster-compact .player-chip{padding:3px 6px;font-size:12px}
